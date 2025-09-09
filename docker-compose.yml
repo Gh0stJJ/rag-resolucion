@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  chroma:
+  image: chroma/chroma:latest
+  container_name: chroma
+  environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - ANONYMIZED_TELEMETRY=False 
+  ports:
+    - "8001:8000"
+  volumes:
+    - ./chroma_data:/chroma/.chromadb
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_api
+    environment:
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+    volumes:
+      - ./app:/app
+      - ./data:/data
+    depends_on:
+      - chroma
+    ports:
+      - "8099:8099"
