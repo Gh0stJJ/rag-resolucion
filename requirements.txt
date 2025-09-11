@@ -1,0 +1,15 @@
+fastapi==0.112.2
+uvicorn[standard]==0.30.5
+python-dotenv==1.0.1
+pydantic==2.8.2
+requests==2.32.3
+dateparser==1.2.0
+
+# Chroma + cliente
+chromadb
+
+# Embeddings locales (ligero y bueno)
+sentence-transformers==3.0.1
+torch==2.3.1
+openai>=1.42.0
+
