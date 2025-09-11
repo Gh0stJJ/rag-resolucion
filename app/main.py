@@ -16,8 +16,11 @@ class AskRequest(BaseModel):
 
 @app.post("/ingest")
 def ingest(path: str = "/data/json"):
-    stats = ingest_folder(path)
-    return {"status": "ok", **stats}
+    try:
+        stats = ingest_folder(path)
+        return {"status": "ok", **stats}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.post("/ask")
 def ask(payload: AskRequest):
