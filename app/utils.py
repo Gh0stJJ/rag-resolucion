@@ -2,6 +2,7 @@ import re
 
 from typing import List, Dict, Any, Iterable
 import dateparser
+from datetime import datetime
 
 
 MONTHS_ES = {
@@ -31,9 +32,16 @@ def normalize_tipo(tipo: str) -> str:
 def parse_fecha_es(fecha_txt: str):
     if not fecha_txt:
         return None, None, None
-    dt = dateparser.parse(fecha_txt, languages=["es"])
-    if not dt:
-        return None, None, None
+    match = re.match(r"^\d{4}-\d{2}-\d{2}$", fecha_txt)
+    if match:
+        try:
+            dt = datetime.strptime(fecha_txt, "%Y-%m-%d")
+        except Exception:
+            return None, None, None
+    else:
+        dt = dateparser.parse(fecha_txt, languages=["es"])
+        if not dt:
+            return None, None, None
     fecha_iso = dt.strftime("%Y-%m-%d")
     legible = f"{dt.day} de {MONTHS_ES[dt.month]} de {dt.year}"
     return dt.date(), fecha_iso, legible
