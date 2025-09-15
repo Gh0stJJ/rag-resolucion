@@ -20,7 +20,6 @@ class RetrievalResult(BaseModel):
     distance: float
 
 def build_client():
-    # Si tu servidor NO usa multi-tenant/database, elimina tenant= y database=
     return chromadb.HttpClient(
         host=CHROMA_HOST,
         port=CHROMA_PORT,

@@ -11,7 +11,7 @@ TOP_K = int(os.getenv("TOP_K", "12"))
 MAX_ANSWER_CHUNKS = int(os.getenv("MAX_ANSWER_CHUNKS", "6"))
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL") 
-LLM_MODEL = os.getenv("LLM_MODEL", "meta-llama-3.1-8b-instruct")
+LLM_MODEL = os.getenv("LLM_MODEL", "mistral-7b-instruct-v0.2")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "not-needed")
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-ai/nomic-embed-text-v1.5-GGUF")

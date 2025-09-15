@@ -16,12 +16,6 @@ REQUI_FIELDS = {"id_reso", "seccion", "parrafo_index", "chunk_index", "texto"}
 
 UPSERT_BATCH = 256
 
-def _client():
-    return chromadb.HttpClient(
-        host=CHROMA_HOST,
-        port=CHROMA_PORT,
-        settings=Settings(allow_reset=False)
-    )
 
 def _ensure_collection(client):
     try:
@@ -137,7 +131,7 @@ def _upsert_in_batches(coll, valid_docs: List[Dict], report: Dict):
 
 
 def ingest_folder(json_dir: str = "/data/json") -> Dict:
-    client = _client()
+    client = get_client()
     coll = _ensure_collection(client)
 
     p = Path(json_dir)
