@@ -30,6 +30,15 @@ services:
       - LLM_API_KEY=notused
       - MAX_ANSWER_CHUNKS=6
       - TOP_K=12
+      - TEMPERATURE=0.3
+      - MAX_TOKENS=1000
+
+      # Document chunking settings
+      - CHUNK_MAX_TOKENS=400
+      - CHUNK_OVERLAP_TOKENS=80
+      - CHUNK_USE_SPACY=1
+      - SPACY_MODEL=es_core_news_sm
+      - SPACY_MAX_LENGTH=5000000
 
       #Embeddings via LMStudio
       - EMBED_BASE_URL=http://host.docker.internal:1234/v1

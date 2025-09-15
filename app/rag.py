@@ -5,10 +5,10 @@ from sentence_transformers import SentenceTransformer
 from settings import (
     CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION, EMBED_MODEL,
     TOP_K, MAX_ANSWER_CHUNKS, LLM_BASE_URL, LLM_MODEL, LLM_API_KEY,
-    CHROMA_TENANT, CHROMA_DATABASE
+    CHROMA_TENANT, CHROMA_DATABASE, TEMPERATURE, MAX_TOKENS
 )
 from pydantic import BaseModel
-
+import numpy as np
 from embeddins import embed_query
 from openai import OpenAI
 
@@ -49,7 +49,7 @@ def get_or_create_coll(client):
 
   
   
-  
+
   
 
 
@@ -59,6 +59,41 @@ def get_embedder():
     if _model is None:
         _model = SentenceTransformer(EMBED_MODEL)
     return _model
+
+
+def _mmr(doc_vectors, query_vec, lambda_mult=0.5, top_n = 10):
+    """
+    Maximal Marginal Relevance (MMR) for retrieval re-ranking.
+    doc_vectors: list of document vectors (numpy arrays)
+    query_vec: query vector (numpy array)
+    lambda_mult: trade-off between relevance and diversity (0 <= lambda_mult <= 1)
+    top_n: number of documents to select
+
+    Returns indices of selected documents.
+    """
+
+    D = np.array(doc_vectors)
+    q = np.array(query_vec)
+
+    #simi  query - documentos
+    qsim = D @ q 
+    selected, candidates = [], list(range(len(D)))
+    while len(selected) < min(top_n, len(D)):
+        if not selected:
+            i = int(np.argmax(qsim))
+            selected.append(i); candidates.remove(i); continue
+        # min sim btn selected
+
+        Dsel = D[selected]
+        red = D @ Dsel.T # doc - doc sim
+
+        max_red = red.max(axis=1)
+        score = lambda_mult * qsim - (1 - lambda_mult) * max_red
+        score[list(selected)] = -np.inf
+        i = int(np.argmax(score))
+        selected.append(i); candidates.discard(i)
+    return selected
+
 
 def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[RetrievalResult]:
     _, coll = build_client_collection()
@@ -81,22 +116,28 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
         where = {"$and": conditions}
 
 
+    # Retrieve more initial results for MMR reranking
+    initial_k = min(TOP_K * 2, 100)
     res = coll.query(
         query_embeddings=[qvec],
-        n_results=TOP_K,
+        n_results=initial_k,
         where=where or None,
-        include=["documents", "metadatas", "distances"]
+        include=["embeddings", "documents", "metadatas", "distances"]
     )
 
+    # Apply MMR reranking
+    doc_vectors = np.array(res["embeddings"][0])
+    mmr_indices = _mmr(doc_vectors, qvec, lambda_mult=0.5, top_n=TOP_K)
+    
+    # Create RetrievalResult objects for reranked results
     out = []
-    for i in range(len(res["ids"][0])):
+    for idx in mmr_indices:
         out.append(RetrievalResult(
-            id=res["ids"][0][i],
-            texto=res["documents"][0][i],
-            metadata=res["metadatas"][0][i],
-            distance=res["distances"][0][i],
+            id=res["ids"][0][idx],
+            texto=res["documents"][0][idx],
+            metadata=res["metadatas"][0][idx],
+            distance=res["distances"][0][idx],
         ))
-    out.sort(key=lambda r: r.distance)
     return out
 
 def format_citations(results: List[RetrievalResult]) -> List[Dict[str, Any]]:
@@ -139,38 +180,43 @@ def _lmstudio_chat(messages: list, temperature: float = 0.2, max_tokens: int = 4
 
 def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:
    
-    # Prepara contexto
-    ctx = []
+    #sources
+    items= []
     for c in contexts[:MAX_ANSWER_CHUNKS]:
         m = c.metadata
-        header = f"[{m.get('id_reso')} | {m.get('seccion')} | anio={m.get('anio')} | fecha={m.get('fecha_legible') or m.get('fecha_iso')}]"
-        ctx.append(f"{header}\n{c.texto}")
-    context_text = "\n\n---\n\n".join(ctx) if ctx else "(no hay fragmentos relevantes)"
+        items.append({
+            "id_reso": m.get("id_reso"),
+            "seccion": m.get("seccion"),
+            "fecha": m.get("fecha_legible") or m.get("fecha_iso"),
+            "texto": c.texto
+        })
+    
+    #sources legibles
+    src_lines = []
+    for it in items:
+        head= f"({it['id_reso']} - {it['seccion']} - {it['fecha']})"
+        src_lines.append(f"{head}\n{it['texto']}\n")
+    sources = "\n\n---\n\n".join(src_lines) if src_lines else "No hay fuentes disponibles."
 
-    if LLM_BASE_URL:
-        system_msg = (
-            "Eres un asistente para responder preguntas sobre resoluciones del Consejo Universitario.\n"
-            "Responde SOLO con la información proporcionada en los fragmentos.\n"
-            "Si la evidencia no es suficiente, indica claramente que no se encontró evidencia suficiente.\n"
-            "Incluye SIEMPRE citas al final en formato: (id_reso; seccion; fecha).\n"
-            "Responde en español, conciso y factual."
-        )
-        user_msg = (
-            f"Pregunta: {query}\n\n"
-            f"Fragmentos:\n{context_text}"
-        )
-        try:
-            return _lmstudio_chat(
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": user_msg}
-                ],
-                temperature=0.2,
-                max_tokens=450
-            )
-        except Exception as e:
-            joined = "\n\n".join([f"- {c.metadata.get('id_reso')} [{c.metadata.get('seccion')}]: {c.texto}" for c in contexts[:MAX_ANSWER_CHUNKS]])
-            return f"(Advertencia: LLM local no disponible: {e})\n\nContexto relevante:\n\n{joined}"
+    system_msg = (
+        "Eres un asistente que responde preguntas sobre resoluciones del Consejo Universitario en español. "
+        "Prioriza la información de las FUENTES. "
+        "Si hay evidencia suficiente: responde conciso, claro y específico. "
+        "Si la evidencia es parcial: responde lo que conste y señala explícitamente qué falta. "
+        "Si no hay evidencia: dilo con claridad y sugiere qué buscar. "
+        "Al final, si se usaron FUENTES, incluye una línea 'Citas: ' con los pares (id_reso; seccion; fecha) usados. "
+        "No inventes citas. No cites si no hay fuentes."
+    )
+
+    user_msg = (
+        f"Pregunta: {query}\n\n"
+        f"FUENTES:\n{sources}"
+    )
+
+    return _lmstudio_chat([
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg}
+    ], temperature=TEMPERATURE, max_tokens=MAX_TOKENS)
 
     # Baseline sin LLM 
     joined = "\n\n".join([f"- {c.metadata.get('id_reso')} [{c.metadata.get('seccion')}]: {c.texto}" for c in contexts[:MAX_ANSWER_CHUNKS]])
