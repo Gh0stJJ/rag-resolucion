@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 import chromadb
 from chromadb.config import Settings
+from chroma_utils import build_client as build_ch_client, get_or_create_collection_with_space
 from pydantic import BaseModel
 from collections import defaultdict
 
@@ -24,25 +25,10 @@ class RetrievalResult(BaseModel):
 
 
 def build_client():
-    return chromadb.HttpClient(
-        host=CHROMA_HOST,
-        port=CHROMA_PORT,
-        settings=Settings(allow_reset=False),
-        tenant=CHROMA_TENANT,
-        database=CHROMA_DATABASE,
-    )
-
+    return build_ch_client()
 
 def build_client_collection():
-    client = build_client()
-    try:
-        coll = client.get_collection(CHROMA_COLLECTION)
-    except Exception:
-        available = [c.name for c in client.list_collections()]
-        raise RuntimeError(
-            f"La colección '{CHROMA_COLLECTION}' no existe. Colecciones disponibles: {available}. "
-            "Ejecuta primero /ingest o crea la colección durante el ingest."
-        )
+    client, coll = get_or_create_collection_with_space()
     return client, coll
 
 
