@@ -23,6 +23,7 @@ services:
       - CHROMA_TENANT=default_tenant
       - CHROMA_DATABASE=default_database
       - CHROMA_COLLECTION=resoluciones_cu 
+      - CHROMA_DISTANCE=cosine
 
       # LMStudio connection
       - LLM_BASE_URL=http://host.docker.internal:1234/v1
@@ -39,6 +40,12 @@ services:
       - CHUNK_USE_SPACY=1
       - SPACY_MODEL=es_core_news_sm
       - SPACY_MAX_LENGTH=5000000
+
+      # BM25 settings
+      - BM25_INDEX_DIR=/data/whoosh_index
+      - K_LEX=200
+      - RERANK_TOP=24
+      - RRF_K=60
 
       #Embeddings via LMStudio
       - EMBED_BASE_URL=http://host.docker.internal:1234/v1

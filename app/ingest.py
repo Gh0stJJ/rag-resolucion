@@ -3,12 +3,14 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 import chromadb
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
-from settings import CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION, EMBED_MODEL, CHROMA_TENANT, CHROMA_DATABASE
+from settings import CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION, EMBED_MODEL, CHROMA_TENANT, CHROMA_DATABASE, BM25_INDEX_DIR
 from utils import to_chunks_from_arrays
 from embeddins import embed_texts
 from math import ceil
 from collections import Counter
+from lex import open_or_create as bm25_open_or_create, add_chunks as bm25_add_chunks
+from lex import reset as bm25_reset
+
 
 
 # Obligatory fields in metadata
@@ -134,6 +136,8 @@ def ingest_folder(json_dir: str = "/data/json") -> Dict:
     client = get_client()
     coll = _ensure_collection(client)
 
+    ix = bm25_open_or_create(BM25_INDEX_DIR)
+
     p = Path(json_dir)
     files = sorted(p.glob("*.json"))
 
@@ -195,6 +199,15 @@ def ingest_folder(json_dir: str = "/data/json") -> Dict:
         _upsert_in_batches(coll, valid, report)
         ingested_now = report["chunks_ingested"] - before_ingested
 
+        # Add to BM25 index
+        try:
+            bm25_add_chunks(ix, valid)
+        except Exception as e:
+            report["errors"].append({
+                "file": f.name,
+                "error": f"bm25_indexing_failed:{repr(e)}"
+            })
+
         report["file_stats"].append({
             "file": f.name,
             "chunks": len(chunks),
@@ -245,6 +258,14 @@ def reset_collection():
     except:
         pass
     client.create_collection(CHROMA_COLLECTION, metadata={"hnsw:space": "cosine"})
+
+    # Reset BM25 index
+    try:
+        bm25_reset(BM25_INDEX_DIR)
+    except Exception as e:
+        print(f"Warning: could not reset BM25 index at {BM25_INDEX_DIR}: {repr(e)}")
+        pass
+
     return {"status": "collection reset"}
 
 if __name__ == "__main__":

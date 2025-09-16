@@ -5,7 +5,7 @@ CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8001"))  # mapeado en compose
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "resoluciones_cu")
 CHROMA_TENANT = os.getenv("CHROMA_TENANT", "default_tenant")
 CHROMA_DATABASE = os.getenv("CHROMA_DATABASE", "default_database")
-
+CHROMA_DISTANCE = os.getenv("CHROMA_DISTANCE", "cosine")
 
 TOP_K = int(os.getenv("TOP_K", "12"))  
 MAX_ANSWER_CHUNKS = int(os.getenv("MAX_ANSWER_CHUNKS", "6"))
@@ -26,3 +26,8 @@ EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-ai/nomic-embed-text-v1.5-GGUF")
 EMBED_API_KEY = os.getenv("EMBED_API_KEY", "notused")
 EMBED_BASE_URL = os.getenv("EMBED_BASE_URL")
 
+#BM25 Configuration
+BM25_INDEX_DIR = os.getenv("BM25_INDEX_DIR", "/data/whoosh_index")
+K_LEX = int(os.getenv("K_LEX", "200"))           
+RERANK_TOP = int(os.getenv("RERANK_TOP", "24"))   
+RRF_K = int(os.getenv("RRF_K", "60"))

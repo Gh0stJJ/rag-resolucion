@@ -19,3 +19,4 @@ tiktoken==0.11.0
 # Procesamiento de lenguaje natural
 spacy==3.8.7
 
+Whoosh==2.7.4
