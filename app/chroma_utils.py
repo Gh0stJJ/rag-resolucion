@@ -6,7 +6,7 @@ def build_client():
     return chromadb.HttpClient(
         host=CHROMA_HOST,
         port=CHROMA_PORT,
-        settings=Settings(allow_reset=False, chroma_distance=CHROMA_DISTANCE),
+        settings=Settings(allow_reset=False),
         tenant=CHROMA_TENANT,
         database=CHROMA_DATABASE,
     )

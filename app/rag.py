@@ -6,6 +6,7 @@ from chromadb.config import Settings
 from chroma_utils import build_client as build_ch_client, get_or_create_collection_with_space
 from pydantic import BaseModel
 from collections import defaultdict
+from openai import OpenAI 
 
 from settings import (
     CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION,
@@ -93,9 +94,12 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
         query_embeddings=[qvec],
         n_results=TOP_K,
         where=_build_where(filtros) if filtros else None,
-        include=["ids"]  
+        include=["distances"]  
     )
-    dense_ids = res_dense.get("ids", [[]])[0] if res_dense.get("ids") else []
+    dense_ids = []
+    if res_dense and res_dense.get("ids"):
+        dense_ids = res_dense["ids"][0] or []
+
 
     # lexico (BM25) – best-effort
     try:
@@ -117,9 +121,9 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
     id_to_payload: Dict[str, Dict[str, Any]] = {}
     for i, cid in enumerate(got.get("ids", [])):
         id_to_payload[cid] = {
-            "texto": got["documents"][i] if got.get("documents") else "",
-            "meta": got["metadatas"][i] if got.get("metadatas") else {},
-            "emb": got["embeddings"][i] if got.get("embeddings") else None
+            "texto": got["documents"][i] if i < len(got["documents"]) else "",
+            "meta": got["metadatas"][i] if i < len(got["metadatas"]) else {},
+            "emb": got["embeddings"][i] if i < len(got["embeddings"]) else None
         }
 
     # final re-ranking MMR
@@ -181,20 +185,35 @@ def format_citations(results: List[RetrievalResult]) -> List[Dict[str, Any]]:
 
 
 def _lmstudio_chat(messages: list, temperature: float = 0.2, max_tokens: int = 400) -> str:
-    """
-    Llama al servidor OpenAI-compatible de LM Studio.
-    """
     if not LLM_BASE_URL:
         raise RuntimeError("LLM_BASE_URL no está configurado. Define LLM_BASE_URL para usar LM Studio.")
-    from openai import OpenAI  # import local para evitar dependencia si no se usa
     client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
-    resp = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens
-    )
-    return resp.choices[0].message.content.strip()
+
+    try:
+        resp = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        msg = str(e)
+        if "Only user and assistant roles are supported" in msg or "jinja template" in msg:
+            # Fallback: aplanar 'system' dentro del primer 'user'
+            sys_text = "\n".join(m["content"] for m in messages if m.get("role") == "system")
+            usr_texts = [m["content"] for m in messages if m.get("role") == "user"]
+            merged_user = ("INSTRUCCIONES DEL SISTEMA:\n" + sys_text + "\n\n" if sys_text else "") + "\n\n".join(usr_texts)
+
+            resp = client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=[{"role": "user", "content": merged_user}],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return resp.choices[0].message.content.strip()
+        # Si es otro error, propágalo
+        raise
 
 
 def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:

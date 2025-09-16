@@ -72,7 +72,7 @@ def _get_token_len_fn():
     return lambda s: len(s.split())
 
         
-TOKEN_LEN = None
+_TOKEN_LEN = None
 
 
 @lru_cache(maxsize=1)

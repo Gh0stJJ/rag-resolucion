@@ -19,7 +19,7 @@ SPACY_MODEL = os.getenv("SPACY_MODEL", "es_core_news_sm")
 SPACY_MAX_LENGTH = int(os.getenv("SPACY_MAX_LENGTH", "5000000")) #jic 
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL") 
-LLM_MODEL = os.getenv("LLM_MODEL", "mistral-7b-instruct-v0.2")
+LLM_MODEL = os.getenv("LLM_MODEL", "mistral-7b-instruct-v0.3")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "not-needed")
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-ai/nomic-embed-text-v1.5-GGUF")
