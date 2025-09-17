@@ -255,6 +255,8 @@ def to_chunks_from_arrays(doc: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
             clean = re.sub(r"\s+", " ", clean).strip()
             if not clean:
                 continue
+
+            header = f"[{id_reso}; {seccion}; {fecha_legible or fecha_iso or ''}; {tipo}] "
             for cidx, ch in enumerate(chunk_text_sentence_tokens(clean, CHUNK_MAX_TOKENS, CHUNK_OVERLAP_TOKENS)):
                 yield {
                     "id_reso": id_reso,
@@ -267,5 +269,12 @@ def to_chunks_from_arrays(doc: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
                     "seccion": seccion,
                     "parrafo_index": idx,
                     "chunk_index": cidx,
-                    "texto": ch,
+                    "texto": header + ch,
                 }
+
+ID_RE = re.compile(r"\bUC-CU-RES-\d{3}-\d{4}\b", re.IGNORECASE)
+
+
+def extract_id_reso(query: str) -> str | None:
+    m = ID_RE.search(query or "")
+    return m.group(0).upper() if m else None

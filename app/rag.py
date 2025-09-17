@@ -24,6 +24,10 @@ class RetrievalResult(BaseModel):
     metadata: Dict[str, Any]
     distance: float
 
+    @property
+    def id_reso(self) -> str | None:
+        return (self.metadata or {}).get("id_reso")
+
 
 def build_client():
     return build_ch_client()
@@ -112,6 +116,13 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
 
     # Fusion rrf
     fused_ids = _rrf_fuse(dense_ids, lex_ids, k=RRF_K)
+    # stick ids to docs
+    if filtros and filtros.get("id_reso"):
+        prefix = filtros["id_reso"] + "|"
+        prim = [cid for cid in fused_ids if cid.startswith(prefix)]
+        rest = [cid for cid in fused_ids if not cid.startswith(prefix)]
+        fused_ids = prim + rest
+
     fused_ids = fused_ids[:max(RERANK_TOP, MAX_ANSWER_CHUNKS)]
     if not fused_ids:
         return []

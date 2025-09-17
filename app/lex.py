@@ -7,7 +7,7 @@ from whoosh.fields import Schema, ID, TEXT, NUMERIC, KEYWORD
 from whoosh.analysis import StemmingAnalyzer
 from whoosh.qparser import MultifieldParser, OrGroup
 from whoosh.scoring import BM25F
-
+from whoosh.query import And, Term
 def _schema():
     # Stemming
     analyzer = StemmingAnalyzer("spanish")
@@ -41,8 +41,12 @@ def build_chunk_id(d: Dict) -> str:
 
 def add_chunks(ix, docs: List[Dict]):
     writer = ix.writer(limitmb=256, procs=1, multisegment=True)
+
     for d in docs:
         chunk_id = build_chunk_id(d)
+        base_text = str(d.get("texto") or "")
+        injected = f"[{d.get('id_reso')}; {d.get('seccion')}; {d.get('fecha_legible') or d.get('fecha_iso') or ''}; {d.get('tipo')}] "
+        
         writer.update_document(
             chunk_id=chunk_id,
             id_reso=str(d.get("id_reso") or ""),
@@ -50,7 +54,7 @@ def add_chunks(ix, docs: List[Dict]):
             anio=int(d.get("anio") or 0),
             tipo=str(d.get("tipo") or ""),
             fecha=str(d.get("fecha_legible") or d.get("fecha_iso") or ""),
-            texto=str(d.get("texto") or "")
+            texto=(injected + base_text)
         )
     writer.commit()
 
@@ -66,7 +70,13 @@ def search(ix, query: str, filtros: Optional[Dict]=None, limit: int=200) -> List
             schema=ix.schema,
             group=OrGroup
         )
-        q = parser.parse(query)
+        
+        q_text = parser.parse(query)
+        if filtros.get("id_reso"):
+            q = And([Term("id_reso", filtros["id_reso"]), q_text])
+        else:
+            q = q_text
+
         results = s.search(q, limit=limit)
         out: List[Tuple[str, float]] = []
         for r in results:

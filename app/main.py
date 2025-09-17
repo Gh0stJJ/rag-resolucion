@@ -7,6 +7,7 @@ from rag import retrieve, format_citations, generate_answer
 from settings import MAX_ANSWER_CHUNKS, TOP_K, K_LEX, RERANK_TOP
 from health import full_health
 import json, time
+from utils import extract_id_reso
 
 ASK_TOTAL = 0
 ASK_EMPTY = 0
@@ -31,7 +32,13 @@ def ingest(path: str = "/data/json"):
 def ask(payload: AskRequest):
     global ASK_TOTAL, ASK_EMPTY
     t0 = time.time()
-    results = retrieve(payload.query, payload.filtros)
+
+    filtros = payload.filtros or {}
+    wanted_id = extract_id_reso(payload.query) # get id_reso if mentioned in the query
+    if wanted_id and not filtros.get("id_reso"):
+        filtros["id_reso"] = wanted_id
+
+    results = retrieve(payload.query, filtros)
     citations = format_citations(results)
     answer = generate_answer(payload.query, results)
     used_docs = list({c["id_reso"] for c in citations})
@@ -40,6 +47,11 @@ def ask(payload: AskRequest):
     avg_dist = sum(r.distance for r in results) / n if n > 0 else 0.0
     min_dist = min((r.distance for r in results), default=0.0)
     max_dist = max((r.distance for r in results), default=0.0)
+
+    wanted_id = filtros.get("id_reso")
+    hres_doc_ids = [ (r.metadata or {}).get("id_reso") for r in results ]
+    hit_at_k = (wanted_id in hres_doc_ids) if wanted_id else None
+    rank_of_wanted = (hres_doc_ids.index(wanted_id) + 1) if (wanted_id and wanted_id in hres_doc_ids) else None
     ASK_TOTAL += 1
 
     empty = (n == 0)
@@ -57,7 +69,10 @@ def ask(payload: AskRequest):
         "max_distance": max_dist,
         "empty": empty,
         "elapsed_ms": elapsed,
-        "empty_context_rate": round(ASK_EMPTY / ASK_TOTAL, 3)
+        "empty_context_rate": round(ASK_EMPTY / ASK_TOTAL, 3),
+        "hit_at_k": hit_at_k,
+        "wanted_id": wanted_id,
+        "rank_of_wanted": rank_of_wanted
     }
 
     print(json.dumps({"event": "ask_metrics", **metrics}, ensure_ascii=False))
