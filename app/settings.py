@@ -1,3 +1,4 @@
+# settings.py
 import os
 
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")

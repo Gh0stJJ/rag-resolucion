@@ -1,3 +1,4 @@
+# chroma_utils.py
 import chromadb
 from chromadb.config import Settings
 from settings import CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION, CHROMA_TENANT, CHROMA_DATABASE, CHROMA_DISTANCE
