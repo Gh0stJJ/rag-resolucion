@@ -234,15 +234,61 @@ def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:
     sources = "\n\n---\n\n".join(src_lines) if src_lines else "No hay fuentes disponibles."
 
     system_msg = (
-        "Eres un asistente que responde preguntas sobre resoluciones del Consejo Universitario en español. "
-        "Prioriza la información de las FUENTES. "
-        "Si hay evidencia suficiente: responde conciso, claro y específico. "
-        "Si la evidencia es parcial: responde lo que conste y señala explícitamente qué falta. "
-        "Si no hay evidencia: dilo con claridad y sugiere qué buscar. "
-        "Al final, si se usaron FUENTES, incluye una línea 'Citas: ' con los pares (id_reso; seccion; fecha) usados. "
-        "No inventes citas. No cites si no hay fuentes."
+            """
+            ===SYSTEM===
+                Eres un asistente experto en **Resoluciones del Consejo Universitario — Universidad de Cuenca**.  
+
+                Reglas obligatorias:
+                1. Responde **solo** con la información contenida en los FRAGMENTOS.  
+                - Nunca uses conocimiento externo ni inventes información.  
+                - Si no hay evidencia suficiente, dilo explícitamente (Tipo 4).  
+                2. Responde siempre en **español**.  
+                3. Usa el **Tipo de respuesta** (1-4) según corresponda:  
+                - Tipo 1: Preciso y conciso para información puntual.  
+                - Tipo 2: Resumen amplio cuando lo pidan.  
+                - Tipo 3: Detalle de artículos o resoluciones específicas.
+                    - Tipo 3.1: Explicación detallada cuando se pida "explica" o "detalla".  
+                - Tipo 4: Indicar falta de evidencia suficiente.  
+                4. Cada respuesta debe seguir este **formato de salida**:  
+                        Tipo de respuesta: X
+                        Respuesta: ...
+                        Evidencia: 
+                5. Cuando cites texto literal de un fragmento, usa comillas cortas (“...”) e Incluye SIEMPRE citas al final en formato: (id_reso; seccion; fecha).  
+                6. Mantén tono formal, educado y cordial.  
+                7. Si hay contradicciones entre fragmentos, indícalas y lista las referencias.  
+            ===END SYSTEM===
+            ===EJEMPLOS===
+
+                ---EJEMPLO TIPO 4---
+                Pregunta: "¿Qué resolución aprobó la modificación del calendario académico?" 
+                Fragmentos:  
+                [RES-UC-050:1] "Que, mediante Resolución No. UC-R-001-2025 de 13 de enero de 2025, expedida por la primera autoridad ejecutiva de la Universidad de Cuenca resolvió: “ARTÍCULO ÚNICO. – Aprobar el Calendario Académico …"  
+
+                Respuesta esperada:  
+                Tipo de respuesta: 4  
+                Respuesta: "No se encontró evidencia suficiente para determinar si la resolución aprobó la modificación del calendario académico.\n\n
+                                        Se encuentran varios fragmentos que mencionan la reforma del calendario académico 2025-2026, pero no hay una resolución específica que lo apruebe. Algunas de las resoluciones mencionadas se refieren a la aprobación del calendario para ingreso de estudiantes y otros trámites relacionados con el proceso de matrículas, pero no se menciona explícitamente la modificación del calendario académico.
+                                        \n\nPor lo tanto, no se puede determinar si se ha aprobado la modificación del calendario académico.
+                Evidencia: [UC-CU-RES-140-2025]  
+                ---FIN---
+
+            ===END EJEMPLOS==="""
     )
-    user_msg = f"Pregunta:\n{query}\n\nFUENTES:\n{sources}"
+
+    user_msg = (
+            f"""
+            ===USER===
+                Pregunta usuario: {query}\n\n
+
+                FRAGMENTOS: \n{sources}\n\n
+
+                Instrucciones adicionales al asistente:  
+                - Identifica el tipo de respuesta adecuado según la pregunta.  
+                - Usa únicamente lo que está en los fragmentos.  
+                - Si no encuentras evidencia suficiente, responde en Tipo 4.  
+            ===END USER===
+            """
+    )
 
     return _lmstudio_chat(
         [
@@ -252,3 +298,6 @@ def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS
     )
+
+
+
