@@ -7,7 +7,7 @@ from rag import retrieve, format_citations, generate_answer
 from settings import MAX_ANSWER_CHUNKS, TOP_K, K_LEX, RERANK_TOP
 from health import full_health
 import json, time
-from utils import extract_id_reso
+from utils import extract_id_reso, extract_month_range
 
 ASK_TOTAL = 0
 ASK_EMPTY = 0
@@ -38,6 +38,14 @@ def ask(payload: AskRequest):
     if wanted_id and not filtros.get("id_reso"):
         filtros["id_reso"] = wanted_id
 
+    mr = extract_month_range(payload.query)
+    if mr and not filtros.get("date_from_yyyymmdd") and not filtros.get("date_to_yyyymmdd"):
+        y_from, y_to, anio, mes = mr
+        filtros["anio"] = anio
+        filtros["mes"] = mes
+        filtros["date_from_yyyymmdd"] = y_from
+        filtros["date_to_yyyymmdd"] = y_to
+    
     results = retrieve(payload.query, filtros)
     citations = format_citations(results)
     answer = generate_answer(payload.query, results)
@@ -72,8 +80,18 @@ def ask(payload: AskRequest):
         "empty_context_rate": round(ASK_EMPTY / ASK_TOTAL, 3),
         "hit_at_k": hit_at_k,
         "wanted_id": wanted_id,
-        "rank_of_wanted": rank_of_wanted
+        "rank_of_wanted": rank_of_wanted,
     }
+
+    # add date metrics if any
+    if mr:
+        y_from, y_to, anio, mes = mr
+        metrics.update({
+            "filter_anio": anio,
+            "filter_mes": mes,
+            "filter_date_from_yyyymmdd": y_from,
+            "filter_date_to_yyyymmdd": y_to,
+        })
 
     print(json.dumps({"event": "ask_metrics", **metrics}, ensure_ascii=False))
 

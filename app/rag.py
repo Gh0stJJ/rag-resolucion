@@ -45,6 +45,16 @@ def _build_where(filtros: Dict[str, Any]) -> Dict[str, Any]:
         conditions.append({"tipo": {"$eq": filtros["tipo"]}})
     if "id_reso" in filtros and filtros["id_reso"]:
         conditions.append({"id_reso": {"$eq": filtros["id_reso"]}})
+
+    if "mes" in filtros and filtros["mes"]:
+        conditions.append({"mes": {"$eq": int(filtros["mes"])}})
+
+    #date range
+    df = filtros.get("date_from_yyyymmdd")
+    dt = filtros.get("date_to_yyyymmdd")
+    if df is not None: conditions.append({"fecha_yyyymmdd": {"$gte": int(df)}})
+    if dt is not None: conditions.append({"fecha_yyyymmdd": {"$lte": int(dt)}})
+
     if not conditions:
         return {}
     return {"$and": conditions} if len(conditions) > 1 else conditions[0]

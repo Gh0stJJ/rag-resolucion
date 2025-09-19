@@ -1,6 +1,6 @@
 # utils.py
 import re 
-
+from calendar import monthrange
 from typing import List, Dict, Any, Iterable
 import dateparser
 from datetime import datetime
@@ -245,6 +245,10 @@ def to_chunks_from_arrays(doc: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
 
     _, fecha_iso, fecha_legible = parse_fecha_es(fecha_txt)
     anio = int(fecha_iso.split("-")[0]) if fecha_iso else None
+    mes = int(fecha_iso.split("-")[1]) if fecha_iso else None
+    dia = int(fecha_iso.split("-")[2]) if fecha_iso else None
+
+    fecha_yyyymmdd = (anio * 10000 + mes * 100 + dia) if (anio and mes and dia) else None
 
     for seccion in ("considerando", "resuelve"):
         arr = doc.get(seccion) or []
@@ -261,6 +265,9 @@ def to_chunks_from_arrays(doc: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
                 yield {
                     "id_reso": id_reso,
                     "anio": anio,
+                    "mes": mes,
+                    "dia": dia,
+                    "fecha_yyyymmdd": fecha_yyyymmdd,
                     "fecha_texto": fecha_txt,
                     "fecha_iso": fecha_iso,
                     "fecha_legible": fecha_legible,
@@ -274,7 +281,37 @@ def to_chunks_from_arrays(doc: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
 
 ID_RE = re.compile(r"\bUC-CU-RES-\d{3}-\d{4}\b", re.IGNORECASE)
 
-
 def extract_id_reso(query: str) -> str | None:
     m = ID_RE.search(query or "")
     return m.group(0).upper() if m else None
+
+
+def extract_month_range(q : str | None):
+    """
+    Return (y_from_yyyymmdd, y_to_yyyymmdd, anio, mes) or none
+    """
+
+    if not q: return None
+    dt = dateparser.parse(q, languages=["es"], settings={"PREFER_DATES_FROM": "past"})
+    if not dt:
+
+        m = re.search(r"\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(\d{4})\b", q, re.IGNORECASE)
+        if not m: return None
+
+        month_name = m.group(1).lower()
+        # Map month name to its corresponding integer
+        mes = next((k for k, v in MONTHS_ES.items() if v == month_name), None)
+        if mes is None:
+            return None
+        anio = int(m.group(2))
+
+    else:
+        anio, mes = dt.year, dt.month
+
+
+    last_day = monthrange(anio, mes)[1]
+    y_from = anio * 10000 + mes * 100 + 1
+    y_to = anio * 10000 + mes * 100 + last_day
+    return (y_from, y_to, anio, mes)
+
+      

@@ -8,7 +8,7 @@ CHROMA_TENANT = os.getenv("CHROMA_TENANT", "default_tenant")
 CHROMA_DATABASE = os.getenv("CHROMA_DATABASE", "default_database")
 CHROMA_DISTANCE = os.getenv("CHROMA_DISTANCE", "cosine")
 
-TOP_K = int(os.getenv("TOP_K", "8"))  
+TOP_K = int(os.getenv("TOP_K", "50"))  
 MAX_ANSWER_CHUNKS = int(os.getenv("MAX_ANSWER_CHUNKS", "8"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1200"))
@@ -23,7 +23,7 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "not-needed")
 
-EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-bge-m3")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-nomic-embed-text-v1.5@f32")
 EMBED_API_KEY = os.getenv("EMBED_API_KEY", "notused")
 EMBED_BASE_URL = os.getenv("EMBED_BASE_URL")
 

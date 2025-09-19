@@ -16,6 +16,9 @@ def _schema():
         id_reso=ID(stored=True),
         seccion=ID(stored=True),
         anio=NUMERIC(stored=True, numtype=int),
+        mes=NUMERIC(stored=True, numtype=int),
+        dia=NUMERIC(stored=True, numtype=int),
+        fecha_yyyymmdd=NUMERIC(stored=True, numtype=int),
         tipo=KEYWORD(stored=True, lowercase=True, commas=False),
         fecha=ID(stored=True),
         texto=TEXT(stored=True, analyzer=analyzer)
@@ -52,6 +55,8 @@ def add_chunks(ix, docs: List[Dict]):
             id_reso=str(d.get("id_reso") or ""),
             seccion=str(d.get("seccion") or ""),
             anio=int(d.get("anio") or 0),
+            mes=int(d.get("mes") or 0),
+            fecha_yyyymmdd=int(d.get("fecha_yyyymmdd") or 0),
             tipo=str(d.get("tipo") or ""),
             fecha=str(d.get("fecha_legible") or d.get("fecha_iso") or ""),
             texto=(injected + base_text)
@@ -87,6 +92,25 @@ def search(ix, query: str, filtros: Optional[Dict]=None, limit: int=200) -> List
                         continue
                 except: 
                     continue
+            if "mes" in filtros and filtros["mes"]:
+                try:
+                    if int(r["mes"]) != int(filtros["mes"]): 
+                        continue
+                except: 
+                    continue
+            
+            df = filtros.get("date_from_yyyymmdd")
+            dt = filtros.get("date_to_yyyymmdd")
+            if df or dt:
+                try: 
+                    val = int(r["fecha_yyyymmdd"])
+                    if df and val < int(df): 
+                        continue
+                    if dt and val > int(dt): 
+                        continue
+                except: 
+                    continue
+            
             if "tipo" in filtros and filtros["tipo"]:
                 if (r["tipo"] or "").lower() != str(filtros["tipo"]).lower():
                     continue
