@@ -7,7 +7,7 @@ from chroma_utils import build_client as build_ch_client, get_or_create_collecti
 from pydantic import BaseModel
 from collections import defaultdict
 from openai import OpenAI 
-
+from hyde import generate_hypothetical_document
 from settings import (
     CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION,
     TOP_K, MAX_ANSWER_CHUNKS, LLM_BASE_URL, LLM_MODEL, LLM_API_KEY,
@@ -104,15 +104,33 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
     _, coll = build_client_collection()
     qvec = embed_query(query, normalize=True)
 
-    res_dense = coll.query(
+    # gen hypothetical document
+    pseudo_doc = generate_hypothetical_document(query)
+    hyde_vec = embed_query(pseudo_doc, normalize=True)
+
+    res_dense_q = coll.query(
         query_embeddings=[qvec],
         n_results=TOP_K,
         where=_build_where(filtros) if filtros else None,
         include=["distances"]  
     )
+
+    res_dense_hy = coll.query(
+        query_embeddings=[hyde_vec],
+        n_results=TOP_K,
+        where=_build_where(filtros) if filtros else None,
+        include=["distances"]  
+    )
+
+    # merge dense results
     dense_ids = []
-    if res_dense and res_dense.get("ids"):
-        dense_ids = res_dense["ids"][0] or []
+    if res_dense_q and res_dense_q.get("ids"):
+        dense_ids.extend(res_dense_q["ids"][0] or [])
+    if res_dense_hy and res_dense_hy.get("ids"):
+        dense_ids.extend(res_dense_hy["ids"][0] or [])
+
+    seen = set()
+    dense_ids = [x for x in dense_ids if not (x in seen or seen.add(x))]
 
 
     # lexico (BM25) – best-effort
