@@ -5,15 +5,39 @@ services:
     environment:
       - CHROMA_SERVER_HOST=0.0.0.0
       - CHROMA_SERVER_HTTP_PORT=8000
-      - ANONYMIZED_TELEMETRY=False 
+      - ANONYMIZED_TELEMETRY=False
+      - ALLOW_RESET=True
     ports:
       - "8001:8000"
     volumes:
       - ./chroma_data:/chroma/.chromadb
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+  
+  embedd-service:
+    build:
+      context: ./embed_service
+      dockerfile: Dockerfile
+    container_name: embed-service
+    environment:
+      - EMBED_PORT=8010
+      - EMBED_MODEL=text-embedding-nomic-embed-text-v1.5
+      - DOWNSTREAM_URL=http://host.docker.internal:1234/v1
+      - DOWNSTREAM_API_KEY=notused
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./embed_service:/app
+      - ./data:/data
+    restart: unless-stopped
 
   api:
     build:
-      context: .
+      context: ./app
       dockerfile: Dockerfile
     container_name: rag_api
     environment:
@@ -46,8 +70,8 @@ services:
       - RERANK_TOP=24
       - RRF_K=60
 
-      #Embeddings via LMStudio
-      - EMBED_BASE_URL=http://host.docker.internal:1234/v1
+      #Embeddings via internal service
+      - EMBED_BASE_URL=http://embed-service:8010
       - EMBED_MODEL=text-embedding-nomic-embed-text-v1.5
       - EMBED_API_KEY=notused
 
@@ -56,5 +80,7 @@ services:
       - ./data:/data
     depends_on:
       - chroma
+      - embedd-service
     ports:
       - "8099:8099"
+    restart: unless-stopped
