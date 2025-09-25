@@ -1,129 +1,91 @@
-#embed_service.py
 import os
-import math
-from typing import List, Optional, Union
-
-from fastapi import FastAPI
-from pydantic import BaseModel, Field
-from openai import OpenAI, APIError
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Union, Dict, Any
 import numpy as np
+from openai import OpenAI, APIConnectionError
 
-from settings_embed import EBED_MODEL, DOWNSTREAM_API_KEY, DOWNSTREAM_BASE_URL
+# --- Configuración ---
+# Se leen las variables de entorno directamente.
+EMBED_PORT = int(os.getenv("EMBED_PORT", "8010"))
+EMBED_MODEL = os.getenv("EMBED_MODEL", "onnx-models/all-MiniLM-L6-v2-onnx")
+DOWNSTREAM_BASE_URL = os.getenv("DOWNSTREAM_BASE_URL","http://tei-server:80")
+DOWNSTREAM_API_KEY = os.getenv("DOWNSTREAM_API_KEY", "not-used")
 
-app = FastAPI(title="Embedding Service", version="0.1.0")
+app = FastAPI(title="Servicio de Embeddings", version="0.3.0")
 
-# --- Clientes y Lógica ---
-def get_downstream_client() -> OpenAI:
-    #crea un cliente en OPENAI si la URL está configurada
-    if not DOWNSTREAM_BASE_URL:
-        return None
-    return OpenAI(base_url=DOWNSTREAM_BASE_URL, api_key=DOWNSTREAM_API_KEY)
+# --- Lógica de Embeddings ---
+def dummy_embed(text: str) -> List[float]:
+    seed = sum(ord(c) for c in text)
+    rng = np.random.default_rng(seed=seed)
+    vec = rng.random(4, dtype=np.float32) - 0.5
+    norm_vec = vec / np.linalg.norm(vec)
+    return [round(float(x), 3) for x in norm_vec]
 
-def l2_normalize(vec: List[float]) -> List[float]:
-    arr = np.array(vec, dtype=float)
-    norm = np.linalg.norm(arr)
-    if norm == 0:
-        return arr.tolist()  # [0.0, 0.0, ...]
-    return (arr / norm).tolist()
+# --- Cliente OpenAI ---
+downstream_client = None
+if DOWNSTREAM_BASE_URL:
+    downstream_client = OpenAI(
+        base_url=DOWNSTREAM_BASE_URL,
+        api_key=DOWNSTREAM_API_KEY,
+        timeout=30.0,
+        max_retries=1
+    )
 
-def dummy_embed(texts: List[str]) -> List[List[float]]:
-    """
-    Genera embeddings 'dummy' deterministas y normalizados de 4 dimensiones.
-    Perfecto para pruebas sin un modelo real.
-    """
-    embeddings = []
-    for text in texts:
-        # Crea un hash simple y úsalo para generar 4 números flotantes
-        hash_val = hash(text)
-        vec = [
-            (hash_val % 1000) / 1000.0,
-            (hash_val % 500) / 500.0,
-            math.sin(hash_val),
-            math.cos(hash_val),
-        ]
-        embeddings.append(l2_normalize(vec))
-    return embeddings
 # --- Modelos Pydantic para la API ---
+class EmbeddingsRequest(BaseModel):
+    input: Union[str, List[str]]
+    model: str = EMBED_MODEL
 
-class EmbedRequest(BaseModel):
-    # Acepta 'input' (estándar de OpenAI) o 'text' para compatibilidad
-    input: Optional[Union[str, List[str]]] = None
-    text: Optional[Union[str, List[str]]] = None
-    model: str = EBED_MODEL
-
-    def get_texts(self) -> List[str]:
-        texts = self.input or self.text
-        if not texts:
-            raise ValueError("Se debe proporcionar 'entrada' o 'texto'.")
-        return [texts] if isinstance(texts, str) else texts
-
-class Embediding(BaseModel):
+class EmbeddingData(BaseModel):
     object: str = "embedding"
     embedding: List[float]
     index: int
 
-class EmbedingResponse(BaseModel):
+class EmbeddingsResponse(BaseModel):
     object: str = "list"
-    data: List[Embediding]
-    model: str = EBED_MODEL
-
-class QueryEmbeddingResponse(BaseModel):
-    embedding: List[float]
-    model: str = EBED_MODEL
+    data: List[EmbeddingData]
+    model: str = EMBED_MODEL
 
 # --- Endpoints de la API ---
 @app.get("/")
 def health_check():
-    # Indica que modelo esta usando el servicio
-    is_downstream = bool(DOWNSTREAM_BASE_URL)
-    model_info = {
-        "status": "ok",
-        "model": EBED_MODEL,
-        "downstream_configured": is_downstream,
-        "downstream_url": DOWNSTREAM_BASE_URL if is_downstream else None
+    info: Dict[str, Any] = {
+        "estado": "ok",
+        "modelo_configurado": EMBED_MODEL,
+        "modo": "proxy" if downstream_client else "dummy",
+        "downstream_url": DOWNSTREAM_BASE_URL,
     }
-    return model_info
+    if not downstream_client:
+        info["downstream_estado"] = "no_configurado"
+        return info
+    try:
+        respuesta_prueba = downstream_client.embeddings.create(model=EMBED_MODEL, input=["test"])
+        dimension = len(respuesta_prueba.data[0].embedding)
+        info["downstream_estado"] = "ok"
+        info["downstream_dimension_real"] = dimension
+    except APIConnectionError as e:
+        info["downstream_estado"] = "error_conexion"
+        info["downstream_error"] = f"No se pudo conectar: {e.__cause__}"
+    except Exception as e:
+        info["downstream_estado"] = "error"
+        info["downstream_error"] = str(e)
+    return info
 
-#No se usa la noralización L2 en este endpoint porque los embeddings downstream ya están normalizados
-#En caso de que se necesite, usar l2_normalize en la lista resultante
-@app.post("/embeddings", response_model=EmbedingResponse)
-def create_embeddings(request: EmbedRequest):
-    # Genera embeddings para la lista de textos
-    client = get_downstream_client()
-    texts = request.get_texts()
-
-    if client:
-        # Llama al servicio downstream
+@app.post("/embeddings", response_model=EmbeddingsResponse)
+def create_embeddings(request: EmbeddingsRequest):
+    texts = [request.input] if isinstance(request.input, str) else request.input
+    if downstream_client:
         try:
-            response = client.embeddings.create(
-                model=request.model,
-                input=texts
-            )
+            response = downstream_client.embeddings.create(model=request.model, input=texts)
             embeddings = [e.embedding for e in response.data]
-        except:
-            return {"status": "error", "message": "Error al llamar al servicio downstream: {e}"}, 500
+        except Exception as e:
+            # --- CAMBIO CLAVE: Manejo de errores correcto para FastAPI ---
+            raise HTTPException(status_code=500, detail=f"Error en servicio downstream: {e}")
     else:
-        #Modo Fallback: usa embeddings dummy
-        embeddings = dummy_embed(texts)
-    response_data = [
-        Embediding(embedding=emb, index=i) for i, emb in enumerate(embeddings)
-    ]
-    return EmbedingResponse(data=response_data)
-@app.post("/embed_query", response_model=QueryEmbeddingResponse)
-def embed_query(request: EmbedRequest):
-    # Genera un embedding para una sola consulta
-    texts = request.get_texts()
-    if len(texts) != 1:
-        return {"status": "error", "message": "Se debe proporcionar exactamente un texto para embed_query."}, 400
-    
-    query = texts[0]
-
-    embedding_response = create_embeddings(EmbedRequest(input=[query], model=request.model))
-    if isinstance(embedding_response, tuple):  # Error handling
-        raise Exception(embedding_response[0].get("message", "Error desconocido"))
-    
-    embedding = embedding_response.data[0].embedding
-    return QueryEmbeddingResponse(embedding=embedding)
+        embeddings = [dummy_embed(t) for t in texts]
+    data = [EmbeddingData(embedding=emb, index=i) for i, emb in enumerate(embeddings)]
+    return EmbeddingsResponse(data=data, model=request.model or EMBED_MODEL)
 
 if __name__ == "__main__":
     import uvicorn

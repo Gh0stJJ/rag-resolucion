@@ -1,40 +1,39 @@
-# embeddins.py
+import os
 from typing import List
-import math 
-from openai import OpenAI
-from settings import EMBED_BASE_URL, EMBED_MODEL, EMBED_API_KEY
+import httpx
+from settings import EMBED_BASE_URL
 
+#Cliente httpx para mejor performance
+client = httpx.Client(timeout=60)
 
-def _client() -> OpenAI:
+def embed_texts(texts: List[str], **kwargs) -> List[List[float]]:
+    # Llama al servicio de embeddings 
     if not EMBED_BASE_URL:
-        raise RuntimeError("EMBED_BASE_URL not set")
-    return OpenAI(base_url=EMBED_BASE_URL, api_key=EMBED_API_KEY)
+        raise ValueError("EMBED_BASE_URL no está configurado.")
+    url = f"{EMBED_BASE_URL}/embeddings"
+    payload = {"input": texts}
 
-def l2_normalize(vec: List[float]) -> List[float]:
-    norm = math.sqrt(sum(x*x for x in vec)) or 1.0
-    return [x / norm for x in vec]
+    try:
+        reponse = client.post(url, json=payload)
+        reponse.raise_for_status()
+        # El servicio devuelve un objeto EmbeddingResponse
+        json_response = reponse.json()
+        embeddings = [item["embedding"] for item in json_response.get("data", [])]
+        return embeddings
+    except httpx.HTTPError as e:
+        print(f"Error HTTP al llamar al servicio de embeddings: {e.response.text if e.response else 'No response'}")
+    except Exception as e:
+        print(f"Error al llamar al servicio de embeddings: {e}")
 
-def embed_texts(texts: List[str], normalize:bool = True, batch_size: int = 64) -> List[List[float]]:
+def embed_query(query: str) -> List[float]:
     """
-    Call v1/embeddings from LM Studio
-    Returns a list of vectors (float32/ float64)
+    Genera el embedding para una única consulta (query).
     """
-
-    client = _client()
-    out: List[List[float]] = []
-    for i in range(0, len(texts), batch_size):
-        chunk = texts[i:i+batch_size]
-        resp = client.embeddings.create(
-            model=EMBED_MODEL,
-            input=chunk
-        )
-        vecs = [e.embedding for e in resp.data]
-
-        if normalize:
-            vecs = [l2_normalize(v) for v in vecs]
-        out.extend(vecs)
-    return out
-
-
-def embed_query(query: str, normalize: bool = True) -> List[float]:
-    return embed_texts([query], normalize=normalize)[0]
+    embeddings = embed_texts([query])
+    
+    # Si hubo un error, el resultado será [None]. Lo manejamos aquí.
+    if not embeddings or embeddings[0] is None:
+        # Esto previene el crash en ChromaDB.
+        raise ValueError("No se pudo generar el embedding para la consulta.")
+        
+    return embeddings[0]

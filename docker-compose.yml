@@ -17,16 +17,32 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
-  
-  embedd-service:
+  tei-server:
+    platform: linux/amd64
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    container_name: tei-server
+    command: --model-id onnx-models/all-MiniLM-L6-v2-onnx
+    ports: 
+      - "8081:80"
+    volumes:
+      - ./tei_cache:/data
+    # Descomentar la siguiente sección para una GPU NVIDIA para una aceleración masiva.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+  embed-service:
     build:
       context: ./embed_service
       dockerfile: Dockerfile
     container_name: embed-service
     environment:
       - EMBED_PORT=8010
-      - EMBED_MODEL=text-embedding-nomic-embed-text-v1.5
-      - DOWNSTREAM_URL=http://host.docker.internal:1234/v1
+      - EMBED_MODEL=onnx-models/all-MiniLM-L6-v2-onnx
+      - DOWNSTREAM_BASE_URL=http://tei-server:80
       - DOWNSTREAM_API_KEY=notused
     ports:
       - "8010:8010"
@@ -34,6 +50,8 @@ services:
       - ./embed_service:/app
       - ./data:/data
     restart: unless-stopped
+    depends_on:
+      - tei-server
 
   api:
     build:
@@ -72,7 +90,7 @@ services:
 
       #Embeddings via internal service
       - EMBED_BASE_URL=http://embed-service:8010
-      - EMBED_MODEL=text-embedding-nomic-embed-text-v1.5
+      - EMBED_MODEL=onnx-models/all-MiniLM-L6-v2-onnx
       - EMBED_API_KEY=notused
 
     volumes:
@@ -80,7 +98,7 @@ services:
       - ./data:/data
     depends_on:
       - chroma
-      - embedd-service
+      - embed-service
     ports:
       - "8099:8099"
     restart: unless-stopped

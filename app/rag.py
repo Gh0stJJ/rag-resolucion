@@ -102,7 +102,7 @@ def _mmr(doc_vectors: List[List[float]], query_vec: List[float],
 
 def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[RetrievalResult]:
     _, coll = build_client_collection()
-    qvec = embed_query(query, normalize=True)
+    qvec = embed_query(query)
 
     res_dense = coll.query(
         query_embeddings=[qvec],
