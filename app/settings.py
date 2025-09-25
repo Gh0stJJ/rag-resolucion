@@ -29,6 +29,11 @@ EMBED_BASE_URL = os.getenv("EMBED_BASE_URL")
 
 #BM25 Configuration
 BM25_INDEX_DIR = os.getenv("BM25_INDEX_DIR", "/data/whoosh_index")
-K_LEX = int(os.getenv("K_LEX", "200"))           
+K_LEX = int(os.getenv("K_LEX", "100"))           
 RERANK_TOP = int(os.getenv("RERANK_TOP", "24"))   
 RRF_K = int(os.getenv("RRF_K", "60"))
+
+#MODS
+USE_HYDE = os.getenv("USE_HYDE", "1") == "1"
+USE_MULTIQUERY = os.getenv("USE_MULTIQUERY", "1") == "1"
+MULTIQUERY_N = int(os.getenv("MULTIQUERY_N", "3"))

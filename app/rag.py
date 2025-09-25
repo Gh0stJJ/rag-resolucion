@@ -9,14 +9,14 @@ from collections import defaultdict
 from openai import OpenAI 
 from hyde import generate_hypothetical_document
 from settings import (
-    CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION,
+    USE_MULTIQUERY, USE_HYDE, MULTIQUERY_N,
     TOP_K, MAX_ANSWER_CHUNKS, LLM_BASE_URL, LLM_MODEL, LLM_API_KEY,
     CHROMA_TENANT, CHROMA_DATABASE, TEMPERATURE, MAX_TOKENS,
     K_LEX, RERANK_TOP, RRF_K, BM25_INDEX_DIR
 )
 from embeddins import embed_query
 from lex import open_or_create as bm25_open_or_create, search as bm25_search
-
+from multiquery import decompose_query_into_subqueries
 
 class RetrievalResult(BaseModel):
     id: str
@@ -102,36 +102,40 @@ def _mmr(doc_vectors: List[List[float]], query_vec: List[float],
 
 def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[RetrievalResult]:
     _, coll = build_client_collection()
-    qvec = embed_query(query, normalize=True)
+    extra_results = {}
 
-    # gen hypothetical document
-    pseudo_doc = generate_hypothetical_document(query)
-    hyde_vec = embed_query(pseudo_doc, normalize=True)
+    expanded_queries = [query]
+    subqueries, pseudo_doc = [], None
 
-    res_dense_q = coll.query(
-        query_embeddings=[qvec],
-        n_results=TOP_K,
-        where=_build_where(filtros) if filtros else None,
-        include=["distances"]  
-    )
+    #gen subqueries TODO (Future MCP)
+    if USE_MULTIQUERY:
+        subqueries = decompose_query_into_subqueries(query, n=MULTIQUERY_N)
+        expanded_queries.extend(subqueries)
+        extra_results["subqueries"] = subqueries
 
-    res_dense_hy = coll.query(
-        query_embeddings=[hyde_vec],
-        n_results=TOP_K,
-        where=_build_where(filtros) if filtros else None,
-        include=["distances"]  
-    )
+    #gen hypothetical document (HyDE) TODO (Future MCP)
+    if USE_HYDE:
+        pseudo_doc = generate_hypothetical_document(query)
+        expanded_queries.append(pseudo_doc)
+        extra_results["hyde"] = pseudo_doc[:200]
 
-    # merge dense results
-    dense_ids = []
-    if res_dense_q and res_dense_q.get("ids"):
-        dense_ids.extend(res_dense_q["ids"][0] or [])
-    if res_dense_hy and res_dense_hy.get("ids"):
-        dense_ids.extend(res_dense_hy["ids"][0] or [])
+    qvecs = [embed_query(q, normalize=True) for q in expanded_queries]
+
+    dense_ids: List[str] = []
+
+    # dense search in ChromaDB
+    for qvec in qvecs:
+        res_dense_q = coll.query(
+            query_embeddings=[qvec],
+            n_results=TOP_K,
+            where=_build_where(filtros) if filtros else None,
+            include=["distances"]  
+        )
+        if res_dense_q and res_dense_q.get("ids"):
+            dense_ids.extend(res_dense_q["ids"][0] or [])
 
     seen = set()
     dense_ids = [x for x in dense_ids if not (x in seen or seen.add(x))]
-
 
     # lexico (BM25) – best-effort
     try:
@@ -142,7 +146,7 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
         print(f"[BM25] Error: {repr(e)}")
         lex_ids = []
 
-    # Fusion rrf
+    # Results Fusion rrf
     fused_ids = _rrf_fuse(dense_ids, lex_ids, k=RRF_K)
     # stick ids to docs
     if filtros and filtros.get("id_reso"):
@@ -196,7 +200,7 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
             metadata=p["meta"],
             distance=d
         ))
-    return out
+    return out, extra_results
 
 
 def format_citations(results: List[RetrievalResult]) -> List[Dict[str, Any]]:
