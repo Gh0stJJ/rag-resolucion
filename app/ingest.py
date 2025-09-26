@@ -1,14 +1,18 @@
+# ingest.py
 import json
 from pathlib import Path
 from typing import List, Dict, Tuple
 import chromadb
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
-from settings import CHROMA_HOST, CHROMA_PORT, CHROMA_COLLECTION, EMBED_MODEL, CHROMA_TENANT, CHROMA_DATABASE
+from settings import  CHROMA_COLLECTION, BM25_INDEX_DIR, CHROMA_DISTANCE
 from utils import to_chunks_from_arrays
 from embeddins import embed_texts
 from math import ceil
 from collections import Counter
+from lex import open_or_create as bm25_open_or_create, add_chunks as bm25_add_chunks
+from lex import reset as bm25_reset
+from chroma_utils import build_client as build_ch_client, get_or_create_collection_with_space
+
 
 
 # Obligatory fields in metadata
@@ -132,7 +136,9 @@ def _upsert_in_batches(coll, valid_docs: List[Dict], report: Dict):
 
 def ingest_folder(json_dir: str = "/data/json") -> Dict:
     client = get_client()
-    coll = _ensure_collection(client)
+    coll = get_collection(client)
+
+    ix = bm25_open_or_create(BM25_INDEX_DIR)
 
     p = Path(json_dir)
     files = sorted(p.glob("*.json"))
@@ -195,6 +201,15 @@ def ingest_folder(json_dir: str = "/data/json") -> Dict:
         _upsert_in_batches(coll, valid, report)
         ingested_now = report["chunks_ingested"] - before_ingested
 
+        # Add to BM25 index
+        try:
+            bm25_add_chunks(ix, valid)
+        except Exception as e:
+            report["errors"].append({
+                "file": f.name,
+                "error": f"bm25_indexing_failed:{repr(e)}"
+            })
+
         report["file_stats"].append({
             "file": f.name,
             "chunks": len(chunks),
@@ -209,19 +224,11 @@ def ingest_folder(json_dir: str = "/data/json") -> Dict:
 
 
 def get_client():
-    return chromadb.HttpClient(
-        host=CHROMA_HOST,
-        port=CHROMA_PORT,
-        settings=Settings(allow_reset=False),
-        tenant=CHROMA_TENANT,
-        database=CHROMA_DATABASE
-    )
+    return build_ch_client()
 
 def get_collection(client):
-    try:
-        return client.get_collection(CHROMA_COLLECTION)
-    except:
-        return client.create_collection(CHROMA_COLLECTION, metadata={"hnsw:space": "cosine"})
+    _ , coll = get_or_create_collection_with_space(client)
+    return coll
 
 
 def upsert_chunks(coll, docs: List[Dict]):
@@ -239,12 +246,12 @@ def upsert_chunks(coll, docs: List[Dict]):
 
 # Clean up the collection (for testing purposes)
 def reset_collection():
-    client = get_client()
+    client = build_ch_client()
     try:
         client.delete_collection(CHROMA_COLLECTION)
     except:
         pass
-    client.create_collection(CHROMA_COLLECTION, metadata={"hnsw:space": "cosine"})
+    client.create_collection(CHROMA_COLLECTION, metadata={"hnsw:space": CHROMA_DISTANCE})
     return {"status": "collection reset"}
 
 if __name__ == "__main__":
