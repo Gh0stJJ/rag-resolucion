@@ -29,12 +29,12 @@ services:
       - LLM_MODEL=openai/gpt-oss-20b
       - LLM_API_KEY=notused
       - MAX_ANSWER_CHUNKS=8
-      - TOP_K=50
+      - TOP_K=30
       - TEMPERATURE=0.2
       - MAX_TOKENS=1600
 
       # Document chunking settings
-      - CHUNK_MAX_TOKENS=600
+      - CHUNK_MAX_TOKENS=512
       - CHUNK_OVERLAP_TOKENS=50
       - CHUNK_USE_SPACY=1
       - SPACY_MODEL=es_core_news_sm
