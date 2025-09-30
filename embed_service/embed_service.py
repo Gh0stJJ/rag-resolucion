@@ -1,41 +1,85 @@
+# embed_service.py
+# Este es un servidor de embeddings HÍBRIDO y autocontenido.
+# Puede usar 'sentence-transformers' O 'FlagEmbedding' para cargar un modelo
+# de Hugging Face y servirlo a través de una API compatible con OpenAI.
+# -------------------------------------------------------------------------
+# CAMBIAR DE MOTOR:
+# En docker-compose.yml, ajusta la variable de entorno EMBED_LIBRARY:
+# - EMBED_LIBRARY=sentence-transformers  (para la versión estable y general)
+# - EMBED_LIBRARY=flagembedding          (para BGE-M3 con su motor optimizado)
+# -------------------------------------------------------------------------
+
 import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Union, Dict, Any
-import numpy as np
-from openai import OpenAI, APIConnectionError
+import torch
 
-# --- Configuración ---
-# Se leen las variables de entorno directamente.
-EMBED_PORT = int(os.getenv("EMBED_PORT", "8010"))
-EMBED_MODEL = os.getenv("EMBED_MODEL", "onnx-models/all-MiniLM-L6-v2-onnx")
-DOWNSTREAM_BASE_URL = os.getenv("DOWNSTREAM_BASE_URL","http://tei-server:80")
-DOWNSTREAM_API_KEY = os.getenv("DOWNSTREAM_API_KEY", "not-used")
+# --- Configuración Dinámica del Motor de Embeddings ---
+# Lee la librería a usar desde una variable de entorno. Por defecto, usa la más estable.
+EMBED_LIBRARY = os.getenv("EMBED_LIBRARY", "flagembedding ")
 
-app = FastAPI(title="Servicio de Embeddings", version="0.3.0")
+# Importaciones condicionales basadas en la librería seleccionada
+if EMBED_LIBRARY == "sentence-transformers":
+    from sentence_transformers import SentenceTransformer
+    print("Modo de librería seleccionado: sentence-transformers")
+elif EMBED_LIBRARY == "flagembedding":
+    from FlagEmbedding import BGEM3FlagModel
+    print("Modo de librería seleccionado: flagembedding")
+else:
+    raise ValueError(f"Librería desconocida en EMBED_LIBRARY: '{EMBED_LIBRARY}'. Usa 'sentence-transformers' o 'flagembedding'.")
 
-# --- Lógica de Embeddings ---
-def dummy_embed(text: str) -> List[float]:
-    seed = sum(ord(c) for c in text)
-    rng = np.random.default_rng(seed=seed)
-    vec = rng.random(4, dtype=np.float32) - 0.5
-    norm_vec = vec / np.linalg.norm(vec)
-    return [round(float(x), 3) for x in norm_vec]
 
-# --- Cliente OpenAI ---
-downstream_client = None
-if DOWNSTREAM_BASE_URL:
-    downstream_client = OpenAI(
-        base_url=DOWNSTREAM_BASE_URL,
-        api_key=DOWNSTREAM_API_KEY,
-        timeout=30.0,
-        max_retries=1
-    )
+# --- Configuración General (sin cambios) ---
+MODEL_ID = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
+TOKEN = os.getenv("HUGGING_FACE_HUB_TOKEN")
 
-# --- Modelos Pydantic para la API ---
+# Lógica de Detección de Dispositivo Mejorada
+if torch.cuda.is_available():
+    DEVICE = "cuda"
+elif torch.backends.mps.is_available():
+    DEVICE = "mps"
+else:
+    DEVICE = "cpu"
+print(f"Usando dispositivo: {DEVICE}")
+
+
+# --- Carga del Modelo (Lógica Híbrida) ---
+model = None
+try:
+    print(f"Cargando el modelo '{MODEL_ID}' en el dispositivo '{DEVICE}'...")
+    if TOKEN:
+        print("Token de Hugging Face detectado. Se usará para autenticación.")
+
+    # ========================================================================
+    # SECCIÓN DE CARGA DE MODELO: SENTENCE-TRANSFORMERS
+    # ========================================================================
+    if EMBED_LIBRARY == "sentence-transformers":
+        model = SentenceTransformer(MODEL_ID, device=DEVICE, token=TOKEN)
+
+    # ========================================================================
+    # SECCIÓN DE CARGA DE MODELO: FLAGEMBEDDING (para BGE-M3)
+    # ========================================================================
+    elif EMBED_LIBRARY == "flagembedding":
+        # use_fp16=False es más seguro para CPU/MPS. En GPU NVIDIA, poner a True.
+        model = BGEM3FlagModel(MODEL_ID, device=DEVICE, use_fp16=False)
+        # Nota: FlagEmbedding usa el token de HF automáticamente si la variable de entorno está presente.
+
+    print("Modelo cargado exitosamente.")
+
+except Exception as e:
+    print(f"Error fatal: No se pudo cargar el modelo '{MODEL_ID}' con la librería '{EMBED_LIBRARY}'.")
+    print(f"Detalle del error: {e}")
+    exit(1)
+
+
+app = FastAPI(title=f"Servidor de Embeddings ({EMBED_LIBRARY})", version="2.0.0")
+
+
+# --- Modelos Pydantic para la API (sin cambios) ---
 class EmbeddingsRequest(BaseModel):
     input: Union[str, List[str]]
-    model: str = EMBED_MODEL
+    model: str = MODEL_ID
 
 class EmbeddingData(BaseModel):
     object: str = "embedding"
@@ -45,49 +89,62 @@ class EmbeddingData(BaseModel):
 class EmbeddingsResponse(BaseModel):
     object: str = "list"
     data: List[EmbeddingData]
-    model: str = EMBED_MODEL
+    model: str = MODEL_ID
+
 
 # --- Endpoints de la API ---
 @app.get("/")
-def health_check():
-    info: Dict[str, Any] = {
+def health_check() -> Dict[str, Any]:
+    return {
         "estado": "ok",
-        "modelo_configurado": EMBED_MODEL,
-        "modo": "proxy" if downstream_client else "dummy",
-        "downstream_url": DOWNSTREAM_BASE_URL,
+        "modelo_cargado": MODEL_ID,
+        "dispositivo": DEVICE,
+        "libreria_activa": EMBED_LIBRARY
     }
-    if not downstream_client:
-        info["downstream_estado"] = "no_configurado"
-        return info
-    try:
-        respuesta_prueba = downstream_client.embeddings.create(model=EMBED_MODEL, input=["test"])
-        dimension = len(respuesta_prueba.data[0].embedding)
-        info["downstream_estado"] = "ok"
-        info["downstream_dimension_real"] = dimension
-    except APIConnectionError as e:
-        info["downstream_estado"] = "error_conexion"
-        info["downstream_error"] = f"No se pudo conectar: {e.__cause__}"
-    except Exception as e:
-        info["downstream_estado"] = "error"
-        info["downstream_error"] = str(e)
-    return info
 
 @app.post("/embeddings", response_model=EmbeddingsResponse)
 def create_embeddings(request: EmbeddingsRequest):
     texts = [request.input] if isinstance(request.input, str) else request.input
-    if downstream_client:
-        try:
-            response = downstream_client.embeddings.create(model=request.model, input=texts)
-            embeddings = [e.embedding for e in response.data]
-        except Exception as e:
-            # --- CAMBIO CLAVE: Manejo de errores correcto para FastAPI ---
-            raise HTTPException(status_code=500, detail=f"Error en servicio downstream: {e}")
-    else:
-        embeddings = [dummy_embed(t) for t in texts]
-    data = [EmbeddingData(embedding=emb, index=i) for i, emb in enumerate(embeddings)]
-    return EmbeddingsResponse(data=data, model=request.model or EMBED_MODEL)
+    embeddings_list = []
+    try:
+        # ========================================================================
+        # SECCIÓN DE ENCODING: SENTENCE-TRANSFORMERS
+        # ========================================================================
+        if EMBED_LIBRARY == "sentence-transformers":
+            embeddings = model.encode(
+                texts,
+                normalize_embeddings=True, # Indispensable para sentence-transformers
+                show_progress_bar=False
+            )
+            embeddings_list = [emb.tolist() for emb in embeddings]
+
+        # ========================================================================
+        # SECCIÓN DE ENCODING: FLAGEMBEDDING (para BGE-M3)
+        # ========================================================================
+        elif EMBED_LIBRARY == "flagembedding":
+            # Por ahora, solo pedimos el vector denso para compatibilidad.
+            output = model.encode(
+                texts,
+                return_dense=True,
+                return_sparse=False,
+                return_colbert_vecs=False
+            )
+            # La normalización es automática en FlagEmbedding.
+            embeddings_list = [emb.tolist() for emb in output['dense_vecs']]
+
+        # --- Lógica Común de Respuesta (sin cambios) ---
+        response_data = [
+            EmbeddingData(embedding=emb, index=i) for i, emb in enumerate(embeddings_list)
+        ]
+        return EmbeddingsResponse(data=response_data, model=MODEL_ID)
+
+    except Exception as e:
+        print(f"Error al generar embeddings con '{EMBED_LIBRARY}': {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno al generar embeddings: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("EMBED_PORT", "8010"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+

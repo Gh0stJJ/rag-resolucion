@@ -12,46 +12,37 @@ services:
     volumes:
       - ./chroma_data:/chroma/.chromadb
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 5s
-  tei-server:
-    platform: linux/amd64
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
-    container_name: tei-server
-    command: --model-id onnx-models/all-MiniLM-L6-v2-onnx
-    ports: 
-      - "8081:80"
-    volumes:
-      - ./tei_cache:/data
-    # Descomentar la siguiente sección para una GPU NVIDIA para una aceleración masiva.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+
+  # --- No tei-server en esta versión ---
+
   embed-service:
+    # Usamos emulación para asegurar compatibilidad con PyTorch en Mac M1/M2/M3
+    #Emular baja el rendimiento
+    #platform: linux/amd64
     build:
       context: ./embed_service
       dockerfile: Dockerfile
     container_name: embed-service
     environment:
+      - EMBED_LIBRARY=flagembedding
+      - HF_TOKEN=${HF_TOKEN}
+      - EMBED_MODEL=BAAI/bge-m3
       - EMBED_PORT=8010
-      - EMBED_MODEL=onnx-models/all-MiniLM-L6-v2-onnx
-      - DOWNSTREAM_BASE_URL=http://tei-server:80
-      - DOWNSTREAM_API_KEY=notused
+    env_file:
+      - .env
     ports:
       - "8010:8010"
     volumes:
+      # Montamos el código para desarrollo rápido
       - ./embed_service:/app
-      - ./data:/data
+      # Caché para los modelos descargados
+      - ./hf_cache:/root/.cache/huggingface
     restart: unless-stopped
-    depends_on:
-      - tei-server
 
   api:
     build:
@@ -63,10 +54,10 @@ services:
       - CHROMA_PORT=8000
       - CHROMA_TENANT=default_tenant
       - CHROMA_DATABASE=default_database
-      - CHROMA_COLLECTION=resoluciones_cu 
+      - CHROMA_COLLECTION=resoluciones_cu
       - CHROMA_DISTANCE=cosine
 
-      # LMStudio connection
+      # Conexión al LLM (ej. LM Studio)
       - LLM_BASE_URL=http://host.docker.internal:1234/v1
       - LLM_MODEL=openai/gpt-oss-20b
       - LLM_API_KEY=notused
@@ -75,22 +66,22 @@ services:
       - TEMPERATURE=0.2
       - MAX_TOKENS=1600
 
-      # Document chunking settings
+      # Configuración de chunking de documentos
       - CHUNK_MAX_TOKENS=1000
       - CHUNK_OVERLAP_TOKENS=0
       - CHUNK_USE_SPACY=1
       - SPACY_MODEL=es_core_news_sm
       - SPACY_MAX_LENGTH=5000000
 
-      # BM25 settings
+      # Configuración de BM25
       - BM25_INDEX_DIR=/data/whoosh_index
       - K_LEX=200
       - RERANK_TOP=24
       - RRF_K=60
 
-      #Embeddings via internal service
+      # Configuración de embeddings a través del servicio interno
       - EMBED_BASE_URL=http://embed-service:8010
-      - EMBED_MODEL=onnx-models/all-MiniLM-L6-v2-onnx
+      - EMBED_MODEL=BAAI/bge-m3
       - EMBED_API_KEY=notused
 
     volumes:

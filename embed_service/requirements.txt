@@ -1,8 +1,15 @@
 fastapi==0.112.2
 uvicorn[standard]==0.30.5
-python-dotenv==1.0.1
 pydantic==2.8.2
-openai>=1.42.0
-numpy==2.3.0
+numpy
 
-
+sentence-transformers
+transformers
+torch
+torchvision 
+torchaudio
+huggingface-hub
+scikit-learn
+scipy
+tqdm
+FlagEmbedding
