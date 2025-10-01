@@ -4,7 +4,7 @@
 # de Hugging Face y servirlo a través de una API compatible con OpenAI.
 # -------------------------------------------------------------------------
 # CAMBIAR DE MOTOR:
-# En docker-compose.yml, ajusta la variable de entorno EMBED_LIBRARY:
+# En docker-compose.yml, ajustar la variable de entorno EMBED_LIBRARY:
 # - EMBED_LIBRARY=sentence-transformers  (para la versión estable y general)
 # - EMBED_LIBRARY=flagembedding          (para BGE-M3 con su motor optimizado)
 # -------------------------------------------------------------------------
@@ -17,7 +17,9 @@ import torch
 
 # --- Configuración Dinámica del Motor de Embeddings ---
 # Lee la librería a usar desde una variable de entorno. Por defecto, usa la más estable.
-EMBED_LIBRARY = os.getenv("EMBED_LIBRARY", "flagembedding ")
+# littlejohn-ai/bge-m3-spa-law-qa
+# flagembedding
+EMBED_LIBRARY = os.getenv("EMBED_LIBRARY", "flagembedding")
 
 # Importaciones condicionales basadas en la librería seleccionada
 if EMBED_LIBRARY == "sentence-transformers":
@@ -31,7 +33,7 @@ else:
 
 
 # --- Configuración General (sin cambios) ---
-MODEL_ID = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
+MODEL_ID = os.getenv("EMBED_MODEL", "littlejohn-ai/bge-m3-spa-law-qa")
 TOKEN = os.getenv("HUGGING_FACE_HUB_TOKEN")
 
 # Lógica de Detección de Dispositivo Mejorada
@@ -55,7 +57,8 @@ try:
     # SECCIÓN DE CARGA DE MODELO: SENTENCE-TRANSFORMERS
     # ========================================================================
     if EMBED_LIBRARY == "sentence-transformers":
-        model = SentenceTransformer(MODEL_ID, device=DEVICE, token=TOKEN)
+        #Para usar Jina model_kwargs={'default_task': 'retrieval'}
+        model = SentenceTransformer(MODEL_ID, device=DEVICE,trust_remote_code=True)
 
     # ========================================================================
     # SECCIÓN DE CARGA DE MODELO: FLAGEMBEDDING (para BGE-M3)
@@ -111,10 +114,11 @@ def create_embeddings(request: EmbeddingsRequest):
         # SECCIÓN DE ENCODING: SENTENCE-TRANSFORMERS
         # ========================================================================
         if EMBED_LIBRARY == "sentence-transformers":
+            #Para usar JINA task="retrieval"
             embeddings = model.encode(
                 texts,
                 normalize_embeddings=True, # Indispensable para sentence-transformers
-                show_progress_bar=False
+                show_progress_bar=True
             )
             embeddings_list = [emb.tolist() for emb in embeddings]
 

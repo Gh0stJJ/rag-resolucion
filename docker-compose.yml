@@ -31,7 +31,7 @@ services:
     environment:
       - EMBED_LIBRARY=flagembedding
       - HF_TOKEN=${HF_TOKEN}
-      - EMBED_MODEL=BAAI/bge-m3
+      - EMBED_MODEL=littlejohn-ai/bge-m3-spa-law-qa
       - EMBED_PORT=8010
     env_file:
       - .env
@@ -81,7 +81,7 @@ services:
 
       # Configuración de embeddings a través del servicio interno
       - EMBED_BASE_URL=http://embed-service:8010
-      - EMBED_MODEL=BAAI/bge-m3
+      - EMBED_MODEL=littlejohn-ai/bge-m3-spa-law-qa
       - EMBED_API_KEY=notused
 
     volumes:

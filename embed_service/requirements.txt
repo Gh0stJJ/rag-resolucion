@@ -13,3 +13,7 @@ scikit-learn
 scipy
 tqdm
 FlagEmbedding
+
+einops
+pillow
+peft>=0.15.2
