@@ -5,15 +5,24 @@ services:
     environment:
       - CHROMA_SERVER_HOST=0.0.0.0
       - CHROMA_SERVER_HTTP_PORT=8000
-      - ANONYMIZED_TELEMETRY=False 
+      - ANONYMIZED_TELEMETRY=False
+      - ALLOW_RESET=True
     ports:
       - "8001:8000"
     volumes:
       - ./chroma_data:/chroma/.chromadb
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # --- Esta versión no necesita definición del embed-service ---
 
   api:
     build:
-      context: .
+      context: ./app
       dockerfile: Dockerfile
     container_name: rag_api
     environment:
@@ -21,10 +30,10 @@ services:
       - CHROMA_PORT=8000
       - CHROMA_TENANT=default_tenant
       - CHROMA_DATABASE=default_database
-      - CHROMA_COLLECTION=resoluciones_cu 
+      - CHROMA_COLLECTION=resoluciones_cu
       - CHROMA_DISTANCE=cosine
 
-      # LMStudio connection
+      # Conexión al LLM (ej. LM Studio)
       - LLM_BASE_URL=http://host.docker.internal:1234/v1
       - LLM_MODEL=openai/gpt-oss-20b
       - LLM_API_KEY=notused
@@ -35,20 +44,23 @@ services:
 
       # Document chunking settings
       - CHUNK_MAX_TOKENS=512
-      - CHUNK_OVERLAP_TOKENS=50
+      - CHUNK_OVERLAP_TOKENS=0
+
       - CHUNK_USE_SPACY=1
       - SPACY_MODEL=es_core_news_sm
       - SPACY_MAX_LENGTH=5000000
 
-      # BM25 settings
+      # Configuración de BM25
       - BM25_INDEX_DIR=/data/whoosh_index
       - K_LEX=100
       - RERANK_TOP=24
       - RRF_K=30
 
-      #Embeddings via LMStudio
-      - EMBED_BASE_URL=http://host.docker.internal:1234/v1
-      - EMBED_MODEL=text-embedding-nomic-embed-text-v1.5@f32
+      # Configuración de embeddings a través del servicio interno
+      # 'host.docker.internal' es una dirección especial que desde el contenedor
+      # Apunta a la máquina local
+      - EMBED_BASE_URL=http://host.docker.internal:8010
+      - EMBED_MODEL=littlejohn-ai/bge-m3-spa-law-qa
       - EMBED_API_KEY=notused
 
       #MODS
@@ -63,3 +75,4 @@ services:
       - chroma
     ports:
       - "8099:8099"
+    restart: unless-stopped

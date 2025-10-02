@@ -239,7 +239,7 @@ def upsert_chunks(coll, docs: List[Dict]):
         texts.append(d["texto"])
         meta = {k: v for k, v in d.items() if k != "texto"}
         metas.append(_clean_meta(meta))
-    embeddings = embed_texts(texts, normalize=True) # Nomic 1.5
+    embeddings = embed_texts(texts) # La normalización ahora la maneja el microservicio
     coll.upsert(ids=ids, documents=texts, embeddings=embeddings, metadatas=metas)
 
 

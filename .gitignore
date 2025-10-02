@@ -1,2 +1,7 @@
 __pycache__/
 /data/
+.DS_Store
+tei_cache
+.env
+hf_cache
+venv

@@ -102,6 +102,7 @@ def _mmr(doc_vectors: List[List[float]], query_vec: List[float],
 
 def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[RetrievalResult]:
     _, coll = build_client_collection()
+
     extra_results = {}
 
     expanded_queries = [query]

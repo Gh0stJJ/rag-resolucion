@@ -14,7 +14,7 @@ from settings import (
 TIMEOUT_S = 5.0
 
 def check_chroma() -> Dict[str, Any]:
-    info: Dict[str, Any] = {"ok": False}
+    info: Dict[str, Any] = {"ok": False, "collection_dimension": None}
     base = f"http://{CHROMA_HOST}:{CHROMA_PORT}"
 
     # Heartbeat v2
@@ -34,10 +34,18 @@ def check_chroma() -> Dict[str, Any]:
             tenant=CHROMA_TENANT,
             database=CHROMA_DATABASE,
         )
-        coll = client.get_collection(CHROMA_COLLECTION)
-        # consulta de prueba
-        _ = coll.peek() 
-        info["collection"] = CHROMA_COLLECTION
+        # Intenta obtener la colección. Si no existe, no es un error, solo no hay datos.
+        try:
+            coll = client.get_collection(CHROMA_COLLECTION)
+            info["collection_found"] = True
+            info["collection_count"] = coll.count()
+            # Si hay datos, verifica la dimensión del primer embedding
+            if coll.count() > 0:
+                peek = coll.peek(limit=1)
+                if peek.get("embeddings") and len(peek["embeddings"]) > 0:
+                    info["collection_dimension"] = len(peek["embeddings"][0])
+        except Exception:
+            info["collection_found"] = False
         info["ok"] = True
     except Exception as e:
         info["error"] = f"chroma client/collection failed: {e}"
@@ -83,12 +91,14 @@ def check_chat() -> Dict[str, Any]:
 
 def full_health() -> Dict[str, Any]:
     chroma = check_chroma()
-    embed = check_embed()
+    embeddings = check_embed()
     chat = check_chat()
+    
+    all_ok = chroma.get("ok") and embeddings.get("ok") and chat.get("ok")
 
     return {
-        "status": "ok" if (chroma.get("ok") and embed.get("ok") and chat.get("ok")) else "degraded",
+        "status": "ok" if all_ok else "degraded",
         "chroma": chroma,
-        "embeddings": embed,
+        "embeddings": embeddings,
         "chat": chat,
     }
