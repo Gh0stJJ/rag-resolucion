@@ -120,7 +120,7 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
         expanded_queries.append(pseudo_doc)
         extra_results["hyde"] = pseudo_doc[:200]
 
-    qvecs = [embed_query(q, normalize=True) for q in expanded_queries]
+    qvecs = [embed_query(q) for q in expanded_queries]
 
     dense_ids: List[str] = []
 
