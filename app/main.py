@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from ingest import ingest_folder, reset_collection
 from rag import retrieve, format_citations, generate_answer
-from settings import MAX_ANSWER_CHUNKS, TOP_K, K_LEX, RERANK_TOP
+from settings import MAX_ANSWER_CHUNKS, TOP_K, K_LEX, RERANK_TOP, USE_HYDE, USE_MULTIQUERY, MULTIQUERY_N
 from health import full_health
 import json, time
 from utils import extract_id_reso, extract_month_range
@@ -45,8 +45,8 @@ def ask(payload: AskRequest):
         filtros["mes"] = mes
         filtros["date_from_yyyymmdd"] = y_from
         filtros["date_to_yyyymmdd"] = y_to
-    
-    results = retrieve(payload.query, filtros)
+
+    results, extra_results = retrieve(payload.query, filtros)
     citations = format_citations(results)
     answer = generate_answer(payload.query, results)
     used_docs = list({c["id_reso"] for c in citations})
@@ -60,6 +60,8 @@ def ask(payload: AskRequest):
     hres_doc_ids = [ (r.metadata or {}).get("id_reso") for r in results ]
     hit_at_k = (wanted_id in hres_doc_ids) if wanted_id else None
     rank_of_wanted = (hres_doc_ids.index(wanted_id) + 1) if (wanted_id and wanted_id in hres_doc_ids) else None
+
+
     ASK_TOTAL += 1
 
     empty = (n == 0)
@@ -81,6 +83,8 @@ def ask(payload: AskRequest):
         "hit_at_k": hit_at_k,
         "wanted_id": wanted_id,
         "rank_of_wanted": rank_of_wanted,
+        "hyde_doc": extra_results["hyde"] if USE_HYDE else None,
+        "subqueries": extra_results["subqueries"] if USE_MULTIQUERY else None,
     }
 
     # add date metrics if any

@@ -38,22 +38,23 @@ services:
       - LLM_MODEL=openai/gpt-oss-20b
       - LLM_API_KEY=notused
       - MAX_ANSWER_CHUNKS=8
-      - TOP_K=50
+      - TOP_K=30
       - TEMPERATURE=0.2
       - MAX_TOKENS=1600
 
-      # Configuración de chunking de documentos
-      - CHUNK_MAX_TOKENS=1000
+      # Document chunking settings
+      - CHUNK_MAX_TOKENS=512
       - CHUNK_OVERLAP_TOKENS=0
+
       - CHUNK_USE_SPACY=1
       - SPACY_MODEL=es_core_news_sm
       - SPACY_MAX_LENGTH=5000000
 
       # Configuración de BM25
       - BM25_INDEX_DIR=/data/whoosh_index
-      - K_LEX=200
+      - K_LEX=100
       - RERANK_TOP=24
-      - RRF_K=60
+      - RRF_K=30
 
       # Configuración de embeddings a través del servicio interno
       # 'host.docker.internal' es una dirección especial que desde el contenedor
@@ -61,6 +62,11 @@ services:
       - EMBED_BASE_URL=http://host.docker.internal:8010
       - EMBED_MODEL=littlejohn-ai/bge-m3-spa-law-qa
       - EMBED_API_KEY=notused
+
+      #MODS
+      - USE_HYDE=1
+      - USE_MULTIQUERY=1
+      - MULTIQUERY_N=3
 
     volumes:
       - ./app:/app
