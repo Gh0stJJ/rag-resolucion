@@ -18,31 +18,7 @@ services:
       retries: 3
       start_period: 5s
 
-  # --- No tei-server en esta versión ---
-
-  embed-service:
-    # Usamos emulación para asegurar compatibilidad con PyTorch en Mac M1/M2/M3
-    #Emular baja el rendimiento
-    #platform: linux/amd64
-    build:
-      context: ./embed_service
-      dockerfile: Dockerfile
-    container_name: embed-service
-    environment:
-      - EMBED_LIBRARY=flagembedding
-      - HF_TOKEN=${HF_TOKEN}
-      - EMBED_MODEL=littlejohn-ai/bge-m3-spa-law-qa
-      - EMBED_PORT=8010
-    env_file:
-      - .env
-    ports:
-      - "8010:8010"
-    volumes:
-      # Montamos el código para desarrollo rápido
-      - ./embed_service:/app
-      # Caché para los modelos descargados
-      - ./hf_cache:/root/.cache/huggingface
-    restart: unless-stopped
+  # --- Esta versión no necesita definición del embed-service ---
 
   api:
     build:
@@ -80,7 +56,9 @@ services:
       - RRF_K=60
 
       # Configuración de embeddings a través del servicio interno
-      - EMBED_BASE_URL=http://embed-service:8010
+      # 'host.docker.internal' es una dirección especial que desde el contenedor
+      # Apunta a la máquina local
+      - EMBED_BASE_URL=http://host.docker.internal:8010
       - EMBED_MODEL=littlejohn-ai/bge-m3-spa-law-qa
       - EMBED_API_KEY=notused
 
@@ -89,7 +67,6 @@ services:
       - ./data:/data
     depends_on:
       - chroma
-      - embed-service
     ports:
       - "8099:8099"
     restart: unless-stopped

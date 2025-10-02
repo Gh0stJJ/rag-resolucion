@@ -14,12 +14,15 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Union, Dict, Any
 import torch
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Configuración Dinámica del Motor de Embeddings ---
 # Lee la librería a usar desde una variable de entorno. Por defecto, usa la más estable.
 # littlejohn-ai/bge-m3-spa-law-qa
 # flagembedding
-EMBED_LIBRARY = os.getenv("EMBED_LIBRARY", "flagembedding")
+EMBED_LIBRARY = os.getenv("EMBED_LIBRARY", "sentence-transformers")
 
 # Importaciones condicionales basadas en la librería seleccionada
 if EMBED_LIBRARY == "sentence-transformers":
@@ -151,4 +154,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("EMBED_PORT", "8010"))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
