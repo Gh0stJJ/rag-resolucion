@@ -281,7 +281,6 @@ def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:
             """
             ===SYSTEM===
             Eres un asistente experto en **Resoluciones del Consejo Universitario — Universidad de Cuenca**.  
-
             Reglas obligatorias:
             1. Redacta respuestas lo más completas y extensas posible, desarrollando cada punto relevante y proporcionando explicaciones detalladas basadas en los fragmentos. Si la pregunta lo permite, incluye contexto adicional de los fragmentos y relaciona la información para dar una respuesta profunda y exhaustiva.
             2. Responde **solo** con la información contenida en los FRAGMENTOS.  
@@ -303,7 +302,6 @@ def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:
             8. Si hay contradicciones entre fragmentos, indícalas y lista las referencias.  
             ===END SYSTEM===
             ===EJEMPLOS===
-
             ---EJEMPLO TIPO 4---
             Pregunta: "¿Qué resolución aprobó la modificación del calendario académico?" 
             Fragmentos:  
@@ -316,7 +314,6 @@ def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:
                         \n\nPor lo tanto, no se puede determinar si se ha aprobado la modificación del calendario académico.
             Evidencia: [UC-CU-RES-140-2025]  
             ---FIN---
-
             ---EJEMPLO TIPO 2---
             Pregunta: "¿De qué trata la Resolución UC-CU-RES-144-2025?"
             Fragmentos:

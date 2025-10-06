@@ -64,7 +64,7 @@ services:
       - EMBED_API_KEY=notused
 
       #MODS
-      - USE_HYDE=1
+      - USE_HYDE=0
       - USE_MULTIQUERY=1
       - MULTIQUERY_N=3
 
