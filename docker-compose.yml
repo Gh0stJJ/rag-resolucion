@@ -43,7 +43,7 @@ services:
       - MAX_TOKENS=1600
 
       # Document chunking settings
-      - CHUNK_MAX_TOKENS=512
+      - CHUNK_MAX_TOKENS=1000
       - CHUNK_OVERLAP_TOKENS=0
 
       - CHUNK_USE_SPACY=1
