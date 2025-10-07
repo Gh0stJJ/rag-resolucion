@@ -1,7 +1,7 @@
 #main_agent.py
 from fastapi import FastAPI
 from openai import OpenAI
-import os
+from settings import OPENAI_API_BASE, API_KEY
 
 # Importar la lógica y el modelo de datos del agente de filtros
 from filter_agent.filter_agent import PromtRequest, get_structured_filters
@@ -9,8 +9,6 @@ from filter_agent.filter_agent import PromtRequest, get_structured_filters
 # --- Configuración de la Aplicación y Cliente ---
 
 #os.getenv("OPENAI_BASE_URL", "http://127.0.0.1:1234/v1")
-OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "http://host.docker.internal:1234/v1")
-API_KEY = "not-needed" # Requerido por la librería, aunque no se use
 
 # Inicializa el cliente de OpenAI una sola vez cuando la aplicación arranca
 client = OpenAI(base_url=OPENAI_API_BASE, api_key=API_KEY)
