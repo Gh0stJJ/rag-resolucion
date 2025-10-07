@@ -12,11 +12,12 @@ from settings import (
     USE_MULTIQUERY, USE_HYDE, MULTIQUERY_N,
     TOP_K, MAX_ANSWER_CHUNKS, LLM_BASE_URL, LLM_MODEL, LLM_API_KEY,
     CHROMA_TENANT, CHROMA_DATABASE, TEMPERATURE, MAX_TOKENS,
-    K_LEX, RERANK_TOP, RRF_K, BM25_INDEX_DIR
+    K_LEX, RERANK_TOP, RRF_K, BM25_INDEX_DIR, RERANKER_ENABLED
 )
 from embeddins import embed_query
 from lex import open_or_create as bm25_open_or_create, search as bm25_search
 from multiquery import decompose_query_into_subqueries
+from reranker import rerank
 
 class RetrievalResult(BaseModel):
     id: str
@@ -184,6 +185,17 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
         ordered_ids = [id_list[i] for i in idxs]
     else:
         ordered_ids = fused_ids[:MAX_ANSWER_CHUNKS]
+
+    if RERANKER_ENABLED:
+        try:
+            doc_pairs = [(cid, id_to_payload[cid]["texto"]) for cid in ordered_ids if cid in id_to_payload]
+            reranked = rerank(query, doc_pairs)
+            reranked_ids = [rid for rid, _ in reranked]
+            # Keep only valid reranks
+            ordered_ids = [cid for cid in reranked_ids if cid in ordered_ids]
+            print(f"[Reranker] Re-ranked {len(ordered_ids)} documents.")
+        except Exception as e:
+            print(f"[Reranker] Error during reranking: {repr(e)}")
 
     # Build results
     out: List[RetrievalResult] = []
