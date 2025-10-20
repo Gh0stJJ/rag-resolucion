@@ -34,8 +34,8 @@ RERANK_TOP = int(os.getenv("RERANK_TOP", "24"))
 RRF_K = int(os.getenv("RRF_K", "60"))
 
 #RERANKED Config TODO: Put this in docker-compose too
-RERANKER_BASE_URL = os.getenv("RERANKER_BASE_URL", "http://localhost:1234/v1")
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "jinaai/jina-reranker-v3")
+RERANKER_BASE_URL = os.getenv("RERANKER_BASE_URL", "http://host.docker.internal:1234/v1")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "jina-reranker-v3-mlx")
 
 
 #MODS
