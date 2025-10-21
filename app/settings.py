@@ -33,6 +33,11 @@ K_LEX = int(os.getenv("K_LEX", "100"))
 RERANK_TOP = int(os.getenv("RERANK_TOP", "24"))   
 RRF_K = int(os.getenv("RRF_K", "60"))
 
+#RERANKED Config TODO: Put this in docker-compose too
+RERANKER_BASE_URL = os.getenv("RERANKER_BASE_URL", "http://host.docker.internal:1234/v1")
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "jina-reranker-v3-mlx")
+
+
 #MODS
 USE_HYDE = os.getenv("USE_HYDE", "1") == "1"
 USE_MULTIQUERY = os.getenv("USE_MULTIQUERY", "1") == "1"
@@ -40,3 +45,6 @@ MULTIQUERY_N = int(os.getenv("MULTIQUERY_N", "3"))
 
 #AGENTES
 FILTER_AGENT_URL = os.getenv("FILTER_AGENT_URL", "http://localhost:8020/query-filters")
+
+#RERANKER
+RERANKER_ENABLED = os.getenv("RERANKER_ENABLED", "1") == "1"
