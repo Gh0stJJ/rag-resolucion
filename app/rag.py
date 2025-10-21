@@ -82,7 +82,7 @@ def _build_where_document(filtros: Dict[str, Any]) -> Dict[str, Any] | None:
         return main_conditions[0]
 
     # Envuelve todo en "$or"
-    print(f"WHERE DOCUMENT: { {'$or': main_conditions} }")
+    #print(f"WHERE DOCUMENT: { {'$or': main_conditions} }")
     return {"$or": main_conditions}
 
 def _build_where(filtros: Dict[str, Any]) -> Dict[str, Any]:

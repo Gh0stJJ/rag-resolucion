@@ -43,7 +43,6 @@ def ask(payload: AskRequest):
         raise HTTPException(status_code=503, detail=f"Error calling agent service: {str(e)}")
     # Contruir los filtros
     # ID resolución
-    print(f"Datos extraídos del agente:\n {extracted_data}")
     filtros = {}
     if extracted_data.get("id_resolucion"):
         filtros["id_reso"] = extracted_data["id_resolucion"]
@@ -69,7 +68,7 @@ def ask(payload: AskRequest):
     # tipo de resolución
     if extracted_data.get("tipo_session"):
         filtros["tipo_sesion"] = extracted_data["tipo_session"]
-    print(f"Filtros: {filtros}")
+
     results, extra_results = retrieve(payload.query, filtros)
     citations = format_citations(results)
     answer = generate_answer(payload.query, results)

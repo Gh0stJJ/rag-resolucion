@@ -2,7 +2,7 @@
 import os
 
 CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
-CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8001"))  # mapeado en compose
+CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))  # mapeado en compose
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "resoluciones_cu")
 CHROMA_TENANT = os.getenv("CHROMA_TENANT", "default_tenant")
 CHROMA_DATABASE = os.getenv("CHROMA_DATABASE", "default_database")
@@ -33,7 +33,7 @@ K_LEX = int(os.getenv("K_LEX", "100"))
 RERANK_TOP = int(os.getenv("RERANK_TOP", "24"))   
 RRF_K = int(os.getenv("RRF_K", "60"))
 
-#RERANKED Config TODO: Put this in docker-compose too
+#RERANKED Config
 RERANKER_BASE_URL = os.getenv("RERANKER_BASE_URL", "http://host.docker.internal:1234/v1")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "jina-reranker-v3-mlx")
 
