@@ -76,7 +76,7 @@ services:
       - EMBED_API_KEY=notused
 
       #Configuración de reranker
-      - RERANKER_BASE_URL=http://host.docker.internal:1245/v1
+      - RERANKER_BASE_URL=http://host.docker.internal:1234/v1
       - RERANKER_MODEL=jina-reranker-v3-mlx
 
       # --- Conexión al Servicio de Agentes ---
