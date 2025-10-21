@@ -264,13 +264,8 @@ def to_chunks_from_arrays(doc: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
             for cidx, ch in enumerate(chunk_text_sentence_tokens(clean, CHUNK_MAX_TOKENS, CHUNK_OVERLAP_TOKENS)):
                 yield {
                     "id_reso": id_reso,
-                    "anio": anio,
-                    "mes": mes,
-                    "dia": dia,
-                    "fecha_yyyymmdd": fecha_yyyymmdd,
-                    "fecha_texto": fecha_txt,
                     "fecha_iso": fecha_iso,
-                    "fecha_legible": fecha_legible,
+                    "fecha_yyyymmdd": fecha_yyyymmdd,
                     "acta": acta,
                     "tipo": tipo,
                     "seccion": seccion,
@@ -314,4 +309,17 @@ def extract_month_range(q : str | None):
     y_to = anio * 10000 + mes * 100 + last_day
     return (y_from, y_to, anio, mes)
 
-      
+
+def normalize_name(name: str) -> List[str]:
+    """Limpia y divide un nombre en palabras clave individuales conservando tildes
+    y aplicando formato de nombre propio (Primera mayúscula, resto minúsculas)."""
+    # Elimina caracteres especiales, pero conserva letras acentuadas
+    name = re.sub(r"[^A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]", "", name.strip())
+
+    # Divide en palabras y filtra las muy cortas
+    name_parts = [p for p in name.split() if len(p) > 2]
+
+    # Convierte cada palabra a formato Nombre Propio
+    name_parts = [p.capitalize() for p in name_parts]
+
+    return name_parts

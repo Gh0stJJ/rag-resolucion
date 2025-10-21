@@ -19,6 +19,18 @@ services:
       start_period: 5s
 
   # --- Esta versión no necesita definición del embed-service ---
+  agents_service:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile
+    container_name: agents_service
+    environment:
+      - OPENAI_API=http://host.docker.internal:1234/v1
+    volumes:
+      - ./agents:/app
+    ports:
+      - "8020:8020"
+    restart: unless-stopped
 
   api:
     build:
@@ -63,8 +75,11 @@ services:
       - EMBED_MODEL=littlejohn-ai/bge-m3-spa-law-qa
       - EMBED_API_KEY=notused
 
+      # --- Conexión al Servicio de Agentes ---
+      - FILTER_AGENT_URL=http://agents_service:8020/query-filters
+
       #MODS
-      - USE_HYDE=1
+      - USE_HYDE=0
       - USE_MULTIQUERY=1
       - MULTIQUERY_N=3
 
@@ -73,6 +88,7 @@ services:
       - ./data:/data
     depends_on:
       - chroma
+      - agents_service
     ports:
       - "8099:8099"
     restart: unless-stopped

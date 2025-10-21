@@ -20,7 +20,7 @@ load_dotenv()
 
 # --- Configuración Dinámica del Motor de Embeddings ---
 # Lee la librería a usar desde una variable de entorno. Por defecto, usa la más estable.
-# littlejohn-ai/bge-m3-spa-law-qa
+# littlejohn-ai/bge-m3-spa-law-qa aunque es un modelo de bge funciona mejor con sentence-transformers
 # flagembedding
 EMBED_LIBRARY = os.getenv("EMBED_LIBRARY", "sentence-transformers")
 
