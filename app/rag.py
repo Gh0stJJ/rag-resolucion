@@ -17,6 +17,7 @@ from settings import (
 from embeddins import embed_query
 from lex import open_or_create as bm25_open_or_create, search as bm25_search
 from multiquery import decompose_query_into_subqueries
+from utils import normalize_name
 
 class RetrievalResult(BaseModel):
     id: str
@@ -35,29 +36,83 @@ def build_client():
 def build_client_collection():
     client, coll = get_or_create_collection_with_space()
     return client, coll
+from typing import Any, Dict, List
 
+# (Asumimos que _normalize_name existe en este scope)
+# def _normalize_name(name: str) -> List[str]: ...
+
+def _build_where_document(filtros: Dict[str, Any]) -> Dict[str, Any] | None:
+    """
+    Lógica Anidada: (A OR B OR (c1 AND c2 AND ...))
+    """
+    main_conditions = []
+
+    # Artículos y otros_doc → Se añaden como condiciones OR individuales
+    for key in ["articulos", "otros_doc"]:
+        values = filtros.get(key)
+        if values:
+            # [{"$contains": "Art1"}, {"$contains": "Doc1"}]
+            main_conditions.extend([{"$contains": str(v)} for v in values])
+
+    # Nombres → Se agrupan en un bloque "$and"
+    nombres_list = filtros.get("nombres")
+    if nombres_list:
+        
+        # ["Juan Pérez"] se convierte en ["Juan", "Pérez"]
+        name_parts = [
+            part
+            for name in nombres_list
+            for part in normalize_name(name) # Usa la función
+        ]
+
+        if name_parts:
+            # [{"$contains": "Juan"}, {"$contains": "Pérez"}]
+            and_conditions = [{"$contains": n} for n in name_parts]
+            
+            # Se añade el bloque AND 
+            main_conditions.append({"$and": and_conditions})
+
+    # Si no hay nada, devuelve None
+    if not main_conditions:
+        return None
+
+    # Si solo hay una condición,
+    if len(main_conditions) == 1:
+        return main_conditions[0]
+
+    # Envuelve todo en "$or"
+    print(f"WHERE DOCUMENT: { {'$or': main_conditions} }")
+    return {"$or": main_conditions}
 
 def _build_where(filtros: Dict[str, Any]) -> Dict[str, Any]:
     conditions = []
-    if "anio" in filtros and filtros["anio"]:
-        conditions.append({"anio": {"$eq": int(filtros["anio"])}})
-    if "tipo" in filtros and filtros["tipo"]:
-        conditions.append({"tipo": {"$eq": filtros["tipo"]}})
+    # Filtro por id_reso
     if "id_reso" in filtros and filtros["id_reso"]:
         conditions.append({"id_reso": {"$eq": filtros["id_reso"]}})
 
-    if "mes" in filtros and filtros["mes"]:
-        conditions.append({"mes": {"$eq": int(filtros["mes"])}})
+    # Filtro por tipo de sesión
+    if "tipo_sesion" in filtros and filtros["tipo_sesion"]:
+        conditions.append({"tipo": {"$eq": filtros["tipo_sesion"]}})
 
-    #date range
-    df = filtros.get("date_from_yyyymmdd")
-    dt = filtros.get("date_to_yyyymmdd")
-    if df is not None: conditions.append({"fecha_yyyymmdd": {"$gte": int(df)}})
-    if dt is not None: conditions.append({"fecha_yyyymmdd": {"$lte": int(dt)}})
+    # Filtro por Rango de fechas
+    # Asume que las fechas vienen en formato "YYYY-MM-DD" y el metadata está en YYYYMMDD
+    date_from = filtros.get("date_from")
+    date_to = filtros.get("date_to")
 
-    if not conditions:
-        return {}
-    return {"$and": conditions} if len(conditions) > 1 else conditions[0]
+    if date_from:
+        try:
+            fecha_yyyymmdd_from = int(date_from.replace("-", ""))
+            conditions.append({"fecha_yyyymmdd": {"$gte": fecha_yyyymmdd_from}})
+        except (ValueError, TypeError):
+            print(f"Advertencia: Formato de fecha de inicio inválido: {date_from}")
+
+    if date_to:
+        try:
+            fecha_yyyymmdd_to = int(date_to.replace("-", ""))
+            conditions.append({"fecha_yyyymmdd": {"$lte": fecha_yyyymmdd_to}})
+        except (ValueError, TypeError):
+            print(f"Advertencia: Formato de fecha de fin inválido: {date_to}")
+    return {"$and": conditions} if conditions else None
 
 
 def _rrf_fuse(dense_ids: List[str], lex_ids: List[str], k: int = RRF_K) -> List[str]:
@@ -124,12 +179,17 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
 
     dense_ids: List[str] = []
 
+    # Construir el filtro WHERE y WHERE DOCUMENT
+    where_metadata_filter = _build_where(filtros) if filtros else None
+    where_document_filter = _build_where_document(filtros) if filtros else None
+
     # dense search in ChromaDB
     for qvec in qvecs:
         res_dense_q = coll.query(
             query_embeddings=[qvec],
             n_results=TOP_K,
-            where=_build_where(filtros) if filtros else None,
+            where=where_metadata_filter,
+            where_document=where_document_filter,
             include=["distances"]  
         )
         if res_dense_q and res_dense_q.get("ids"):
@@ -158,7 +218,7 @@ def retrieve(query: str, filtros: Optional[Dict[str, Any]] = None) -> List[Retri
 
     fused_ids = fused_ids[:max(RERANK_TOP, MAX_ANSWER_CHUNKS)]
     if not fused_ids:
-        return []
+        return [], {}
 
     # get payloads by ID
     got = coll.get(ids=fused_ids, include=["documents", "metadatas", "embeddings"])
@@ -280,7 +340,7 @@ def generate_answer(query: str, contexts: List[RetrievalResult]) -> str:
     system_msg = (
             """
             ===SYSTEM===
-            Eres un asistente experto en **Resoluciones del Consejo Universitario — Universidad de Cuenca**.  
+            Eres un asistente experto en **Resoluciones del Consejo Universitario — Universidad de Cuenca** dentro del marco jurídico de la República del Ecuador.  
             Reglas obligatorias:
             1. Redacta respuestas lo más completas y extensas posible, desarrollando cada punto relevante y proporcionando explicaciones detalladas basadas en los fragmentos. Si la pregunta lo permite, incluye contexto adicional de los fragmentos y relaciona la información para dar una respuesta profunda y exhaustiva.
             2. Responde **solo** con la información contenida en los FRAGMENTOS.  

@@ -1,10 +1,11 @@
 #main.py
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, HTTPException
 from pydantic import BaseModel
+import requests
 from typing import Optional, Dict, Any
 from ingest import ingest_folder, reset_collection
 from rag import retrieve, format_citations, generate_answer
-from settings import MAX_ANSWER_CHUNKS, TOP_K, K_LEX, RERANK_TOP, USE_HYDE, USE_MULTIQUERY, MULTIQUERY_N
+from settings import MAX_ANSWER_CHUNKS, TOP_K, K_LEX, RERANK_TOP, USE_HYDE, USE_MULTIQUERY, MULTIQUERY_N,FILTER_AGENT_URL
 from health import full_health
 import json, time
 from utils import extract_id_reso, extract_month_range
@@ -18,7 +19,6 @@ app = FastAPI(title="RAG Resoluciones CU", version="0.1.0")
 
 class AskRequest(BaseModel):
     query: str
-    filtros: Optional[Dict[str, Any]] = None
 
 @app.post("/ingest")
 def ingest(path: str = "/data/json"):
@@ -33,19 +33,43 @@ def ask(payload: AskRequest):
     global ASK_TOTAL, ASK_EMPTY
     t0 = time.time()
 
-    filtros = payload.filtros or {}
-    wanted_id = extract_id_reso(payload.query) # get id_reso if mentioned in the query
-    if wanted_id and not filtros.get("id_reso"):
-        filtros["id_reso"] = wanted_id
-
-    mr = extract_month_range(payload.query)
-    if mr and not filtros.get("date_from_yyyymmdd") and not filtros.get("date_to_yyyymmdd"):
-        y_from, y_to, anio, mes = mr
-        filtros["anio"] = anio
-        filtros["mes"] = mes
-        filtros["date_from_yyyymmdd"] = y_from
-        filtros["date_to_yyyymmdd"] = y_to
-
+    # === Filtros desde el Agente ===
+    # Llamar al agente para obtener los filtros
+    try:
+        agent_response = requests.post(FILTER_AGENT_URL, json={"promt": payload.query})
+        agent_response.raise_for_status() #comprueba errores HTTP
+        extracted_data = agent_response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=503, detail=f"Error calling agent service: {str(e)}")
+    # Contruir los filtros
+    # ID resolución
+    print(f"Datos extraídos del agente:\n {extracted_data}")
+    filtros = {}
+    if extracted_data.get("id_resolucion"):
+        filtros["id_reso"] = extracted_data["id_resolucion"]
+    # Rango de fechas
+    rango_fechas = extracted_data.get("rango_fechas")
+    if rango_fechas and rango_fechas.get("fecha_inicio") and rango_fechas.get("fecha_fin"):
+        filtros["date_from"] = rango_fechas["fecha_inicio"]
+        filtros["date_to"] = rango_fechas["fecha_fin"]
+    # Temas Principales
+    temas = extracted_data.get("temas_principales")
+    if temas:
+        filtros["temas_principales"] = list(temas)
+    # Nombres mencionados
+    nombres = extracted_data.get("nombres_involucrados")
+    if nombres:
+        filtros["nombres"] = list(nombres)
+    # Referencias a artículos y otros documentos
+    referencias = extracted_data.get("numeros_referencia")
+    if referencias and referencias.get("articulos"):
+        filtros["articulos"] = [art.lower() for art in referencias["articulos"]]
+    if referencias and referencias.get("otros_doc"):
+        filtros["otros_doc"] = list(referencias["otros_doc"])
+    # tipo de resolución
+    if extracted_data.get("tipo_session"):
+        filtros["tipo_sesion"] = extracted_data["tipo_session"]
+    print(f"Filtros: {filtros}")
     results, extra_results = retrieve(payload.query, filtros)
     citations = format_citations(results)
     answer = generate_answer(payload.query, results)
@@ -83,29 +107,19 @@ def ask(payload: AskRequest):
         "hit_at_k": hit_at_k,
         "wanted_id": wanted_id,
         "rank_of_wanted": rank_of_wanted,
-        "hyde_doc": extra_results["hyde"] if USE_HYDE else None,
-        "subqueries": extra_results["subqueries"] if USE_MULTIQUERY else None,
+        "hyde_doc": extra_results.get("hyde") if USE_HYDE else None,
+        "subqueries": extra_results.get("subqueries") if USE_MULTIQUERY else None,
     }
 
-    # add date metrics if any
-    if mr:
-        y_from, y_to, anio, mes = mr
-        metrics.update({
-            "filter_anio": anio,
-            "filter_mes": mes,
-            "filter_date_from_yyyymmdd": y_from,
-            "filter_date_to_yyyymmdd": y_to,
-        })
-
     print(json.dumps({"event": "ask_metrics", **metrics}, ensure_ascii=False))
-
 
     return {
         "answer": answer,
         "citations": citations,
         "used_docs": used_docs,
         "chunks_used": min(len(results), MAX_ANSWER_CHUNKS),
-        "metrics": metrics
+        "metrics": metrics,
+        "filters_query": filtros
     }
 
 # Reset the ingestion data (for testing purposes)

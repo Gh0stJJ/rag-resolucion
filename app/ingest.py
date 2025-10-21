@@ -114,7 +114,7 @@ def _upsert_in_batches(coll, valid_docs: List[Dict], report: Dict):
         ids, texts, metas = _prepare_batch(sub)
 
         try:
-            embeddings = embed_texts(texts, normalize=True) # Nomic 1.5
+            embeddings = embed_texts(texts, normalize=True)
             if len(embeddings) != len(texts):
                 report["skipped_reason_counts"]["embeddings_length_mismatch"] += len(texts)
                 continue
