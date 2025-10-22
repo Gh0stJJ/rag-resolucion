@@ -66,12 +66,14 @@ def _build_where_document(filtros: Dict[str, Any]) -> Dict[str, Any] | None:
             for part in normalize_name(name) # Usa la función
         ]
 
-        if name_parts:
+        if len(name_parts) > 1:
             # [{"$contains": "Juan"}, {"$contains": "Pérez"}]
             and_conditions = [{"$contains": n} for n in name_parts]
             
             # Se añade el bloque AND 
             main_conditions.append({"$and": and_conditions})
+        elif len(name_parts) == 1:
+            main_conditions.append({"$contains": name_parts[0]})
 
     # Si no hay nada, devuelve None
     if not main_conditions:
