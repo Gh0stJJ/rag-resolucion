@@ -5,3 +5,4 @@ tei_cache
 .env
 hf_cache
 venv
+.fvenv
