@@ -1,12 +1,10 @@
 #frontend/client.py
 import os 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
 
 class LLMClient:
-    def __init__(self, base_url=os.getenv("CHATENDPNT")):
+    def __init__(self, base_url=os.getenv("API_URL")):
         self.base_url = base_url
     def generate_text(self, prompt, temperature=0.2, max_tokens=1600):
         headers = {

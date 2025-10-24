@@ -97,3 +97,17 @@ services:
     ports:
       - "8099:8099"
     restart: unless-stopped
+  
+  
+  streamlit:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rag_streamlit
+    environment:
+      - API_URL=http://host.docker.internal:8099
+    volumes:
+      - ./frontend:/streamlit_app
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
