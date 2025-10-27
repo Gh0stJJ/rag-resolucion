@@ -10,7 +10,7 @@ CHROMA_DISTANCE = os.getenv("CHROMA_DISTANCE", "cosine")
 
 TOP_K = int(os.getenv("TOP_K", "50"))  
 MAX_ANSWER_CHUNKS = int(os.getenv("MAX_ANSWER_CHUNKS", "8"))
-TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
+TEMPERATURE = float(os.getenv("TEMPERATURE", "0.4"))
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1600"))
 
 CHUNK_MAX_TOKENS = int(os.getenv("CHUNK_MAX_TOKENS", "1000"))
