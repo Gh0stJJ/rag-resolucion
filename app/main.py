@@ -1,6 +1,6 @@
 #main.py
 from fastapi import FastAPI, Body, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import requests
 from typing import Optional, Dict, Any
 from ingest import ingest_folder, reset_collection
@@ -8,7 +8,11 @@ from rag import retrieve, format_citations, generate_answer
 from settings import MAX_ANSWER_CHUNKS, TOP_K, K_LEX, RERANK_TOP, USE_HYDE, USE_MULTIQUERY, MULTIQUERY_N,FILTER_AGENT_URL
 from health import full_health
 import json, time
-from utils import extract_id_reso, extract_month_range
+from uuid import uuid4
+from fastapi.middleware.cors import CORSMiddleware
+import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 ASK_TOTAL = 0
 ASK_EMPTY = 0
@@ -17,8 +21,50 @@ ASK_EMPTY = 0
 app = FastAPI(title="RAG Resoluciones CU", version="0.1.0")
 
 
+# enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # TODO: Add specific origins in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Logging setup
+LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+NDJSON_PATH = LOG_DIR / "events.ndjson"
+
+def append_ndjson(data: Dict[str, Any]):
+    with NDJSON_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(data, ensure_ascii=False) + "\n")
+
+
+
+ # Pydantic models
 class AskRequest(BaseModel):
     query: str
+
+
+class FeedbackPayload(BaseModel):
+    trace_id: str = Field(..., description="Trace ID given by the /ask endpoint")
+    session_id: str = Field(..., description="Session ID of the user")
+    prompt: str
+    feedback: str = Field(..., pattern="^(like|dislike)$", description="Feedback type: 'like' or 'dislike'")
+    backend_response: dict
+    extra : Optional[dict] = None # Additional comments from the user
+
+@app.post("/feedback")
+def feedback(evt: FeedbackPayload):
+    record = {
+        "event": "feedback",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        **evt.model_dump(),
+    }
+    append_ndjson(record)
+    return {"status": "feedback recorded!"}
+
 
 @app.post("/ingest")
 def ingest(path: str = "/data/json"):
@@ -32,6 +78,7 @@ def ingest(path: str = "/data/json"):
 def ask(payload: AskRequest):
     global ASK_TOTAL, ASK_EMPTY
     t0 = time.time()
+    trace_id = str(uuid4())
 
     # === Filtros desde el Agente ===
     # Llamar al agente para obtener los filtros
@@ -112,7 +159,21 @@ def ask(payload: AskRequest):
 
     print(json.dumps({"event": "ask_metrics", **metrics}, ensure_ascii=False))
 
+    append_ndjson({
+        "event": "ask",
+        "trace_id": trace_id,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "request": {"query": payload.query},
+        "response_fragment": {
+            "used_docs": used_docs,
+            "chunks_used": min(len(results), MAX_ANSWER_CHUNKS),
+            "metrics": metrics,
+            "filters_query": filtros
+        },
+    })
+
     return {
+        "trace_id": trace_id,
         "answer": answer,
         "citations": citations,
         "used_docs": used_docs,

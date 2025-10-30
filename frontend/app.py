@@ -29,7 +29,6 @@ def send_feedback(reaction: str, trace_id: str, backend_response: dict, comment:
             "component": "streamlit",
             "version": st.__version__,
             "comment": comment
-
         }
     }
     ok, _ = client.send_feedback(fb_payload)
@@ -38,7 +37,7 @@ def send_feedback(reaction: str, trace_id: str, backend_response: dict, comment:
         st.toast("¡Gracias por tu feedback!")
     else:
         st.warning("No se pudo enviar el feedback. Por favor, intenta de nuevo más tarde.")
-
+        time.sleep(5)
     st.rerun()
 
 def render_feedback_controls(trace_id: str, backend_response: dict):
@@ -65,10 +64,10 @@ def render_feedback_controls(trace_id: str, backend_response: dict):
         return
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Útil", key=f"like_{trace_id}", disabled=(already is not None)):
+        if st.button("", key=f"like_{trace_id}", disabled=(already is not None), icon=":material/thumb_up:", use_container_width=True):
             send_feedback("like", trace_id, backend_response=backend_response)
     with col2:
-        if st.button("No útil", key=f"dislike_{trace_id}", disabled=(already is not None)):
+        if st.button("", key=f"dislike_{trace_id}", disabled=(already is not None), icon=":material/thumb_down:", use_container_width=True):
             st.session_state.pending_feedback = {"trace_id": trace_id}
             st.rerun()
 
@@ -156,10 +155,7 @@ if prompt := st.chat_input("Escribe tu consulta sobre las resoluciones del Conse
 
         answer = response["answer"]
         citations = response.get("citations", [])
-        # trace_id = response.get("trace_id")
-
-        # Dummy trace_id for now
-        trace_id = response.get("trace_id", str(uuid4()))
+        trace_id = response.get("trace_id")
 
         with st.chat_message("assistant", avatar="assets/cutinbot.png"):
             write_progresive_message(answer)

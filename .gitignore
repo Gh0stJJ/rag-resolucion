@@ -6,3 +6,4 @@ tei_cache
 hf_cache
 venv
 .fvenv
+/app/logs/
