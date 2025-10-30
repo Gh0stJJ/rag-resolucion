@@ -34,10 +34,10 @@ def send_feedback(reaction: str, trace_id: str, backend_response: dict, comment:
     ok, _ = client.send_feedback(fb_payload)
     if ok:
         st.session_state.feedback_sent[trace_id] = reaction
-        st.toast("¡Gracias por tu feedback!")
+        st.session_state.flash_toast = {"msg": "¡Gracias por tu feedback!", "icon": "✅"}
+
     else:
-        st.warning("No se pudo enviar el feedback. Por favor, intenta de nuevo más tarde.")
-        time.sleep(5)
+        st.session_state.flash_toast = {"msg": "Error al enviar el feedback. Intenta de nuevo más tarde.", "icon": "❌"}
     st.rerun()
 
 def render_feedback_controls(trace_id: str, backend_response: dict):
@@ -90,6 +90,11 @@ def render_assistant_block(msg: dict):
 # Initial setup
 st.set_page_config(page_title="Chat RAG - Consejo Universitario", page_icon="📋", layout="centered")
 st.title("Resoluciones LLM Chatbot")
+
+flash = st.session_state.pop("flash_toast", None)
+
+if flash:
+    st.toast(flash.get("msg", "¡Operación realizada!"), icon=flash.get("icon", "✅"))
 
 client = LLMClient()
 
