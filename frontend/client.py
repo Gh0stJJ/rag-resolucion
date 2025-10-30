@@ -20,3 +20,12 @@ class LLMClient:
         except requests.HTTPError:
             return response.status_code, response.text
         return response.json()
+    
+    def send_feedback(self, payload: dict):
+        headers = {"Content-Type": "application/json"}
+        try:
+            response = requests.post(f"{self.base_url}/feedback", json=payload, headers=headers)
+            response.raise_for_status()
+            return True, response.json()
+        except requests.RequestException as e:
+            return False, {"error": str(e)}

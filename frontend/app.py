@@ -5,10 +5,10 @@ from streamlit_lottie import st_lottie
 import json
 import time
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 
-def write_progresive_message(message: str, delay: float = 0.02):
+def write_progresive_message(message: str, delay: float = 0.01):
     """Writes a message progressively in the Streamlit app."""
     placeholder = st.empty()
     buffer = ""
@@ -17,17 +17,18 @@ def write_progresive_message(message: str, delay: float = 0.02):
         placeholder.markdown(buffer)
         time.sleep(delay)
 
-def send_feedback(reaction: str, trace_id: str):
+def send_feedback(reaction: str, trace_id: str, backend_response: dict, comment: str | None = None):
     fb_payload = {
         "trace_id": trace_id,
         "session_id": st.session_state.session_id,
         "prompt": st.session_state.last_prompt,
         "feedback": reaction,
-        "backend_response": st.session_state.last_response,
+        "backend_response": backend_response,
         "extra": {
-            "ui_ts": datetime.now(datetime.astimezone.utc).isoformat(),
+            "ui_ts": datetime.now(timezone.utc).isoformat(),
             "component": "streamlit",
-            "version": st.__version__
+            "version": st.__version__,
+            "comment": comment
 
         }
     }
@@ -37,8 +38,56 @@ def send_feedback(reaction: str, trace_id: str):
         st.toast("¡Gracias por tu feedback!")
     else:
         st.warning("No se pudo enviar el feedback. Por favor, intenta de nuevo más tarde.")
-    
 
+    st.rerun()
+
+def render_feedback_controls(trace_id: str, backend_response: dict):
+    """Render feedback buttons for a given trace_id."""
+    already = st.session_state.feedback_sent.get(trace_id)
+    pending = st.session_state.get("pending_feedback")
+
+    if pending and pending.get("trace_id") == trace_id and not already:
+        with st.form(f"fb_form_{trace_id}"):
+            comment = st.text_area(
+                "Cuéntanos qué faltó o qué estuvo mal (opcional)",
+                max_chars=500,
+                placeholder="Ej.: La respuesta no citó la resolución correcta; Faltaron detalles de la sección RESUELVE; etc."
+            )
+            colA, colB = st.columns(2)
+            send_with_comment = colA.form_submit_button("Enviar comentario y enviar feedback")
+            send_without_comment = colB.form_submit_button("Enviar sin comentario")
+        if send_with_comment:
+            st.session_state.pending_feedback = None
+            send_feedback("dislike", trace_id, backend_response=backend_response, comment=comment or None)
+        if send_without_comment:
+            st.session_state.pending_feedback = None
+            send_feedback("dislike", trace_id, backend_response=backend_response, comment=None)
+        return
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Útil", key=f"like_{trace_id}", disabled=(already is not None)):
+            send_feedback("like", trace_id, backend_response=backend_response)
+    with col2:
+        if st.button("No útil", key=f"dislike_{trace_id}", disabled=(already is not None)):
+            st.session_state.pending_feedback = {"trace_id": trace_id}
+            st.rerun()
+
+def render_assistant_block(msg: dict):
+    """Draw an assistant message block. (message, avatar, citations, feedback)"""
+    with st.chat_message("assistant", avatar="assets/cutinbot.png"):
+        st.markdown(msg["content"])
+        citations = msg.get("citations") or []
+        if citations:
+            with st.expander("Ver citas y referencias"):
+                for c in citations:
+                    st.markdown(f"- **{c.get('id_reso','')}** ({c.get('fecha','')})")
+                    st.write(f"  *{c.get('extracto','')}*")
+
+        trace_id = msg.get("trace_id")
+        backend_response = msg.get("backend_response") or st.session_state.last_response
+        if trace_id:
+            render_feedback_controls(trace_id, backend_response)
+    
 # Initial setup
 st.set_page_config(page_title="Chat RAG - Consejo Universitario", page_icon="📋", layout="centered")
 st.title("Resoluciones LLM Chatbot")
@@ -60,20 +109,22 @@ if "last_response" not in st.session_state:
     st.session_state.last_response = None
 if "feedback_sent" not in st.session_state:
     st.session_state.feedback_sent = {} # dict[trace_id] = "like" | "dislike"
+if "pending_feedback" not in st.session_state:
+    st.session_state.pending_feedback = None
 
 # History 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Show chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    if msg["role"] == "assistant":
+        render_assistant_block(msg)
+    else:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
 
 # User input
 if prompt := st.chat_input("Escribe tu consulta sobre las resoluciones del Consejo Universitario...", ):
     st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.last_prompt = prompt
     with st.chat_message("user"):
         st.markdown(prompt)
 
@@ -102,33 +153,35 @@ if prompt := st.chat_input("Escribe tu consulta sobre las resoluciones del Conse
     # Preprocess the response
     if isinstance(response, dict) and "answer" in response:
         st.session_state.last_response = response
+
         answer = response["answer"]
         citations = response.get("citations", [])
-        trace_id = response.get("trace_id")
+        # trace_id = response.get("trace_id")
 
-        write_progresive_message(answer)
+        # Dummy trace_id for now
+        trace_id = response.get("trace_id", str(uuid4()))
 
-        # Citations bloc
-        if citations:
-            with st.expander("Ver citas y referencias"):
-                for c in citations:
-                    st.markdown(f"- **{c.get('id_reso','')}** ({c.get('fecha','')})")
-                    st.write(f"  *{c.get('extracto','')}*")
+        with st.chat_message("assistant", avatar="assets/cutinbot.png"):
+            write_progresive_message(answer)
+            
+            if citations:
+                with st.expander("Ver citas y referencias"):
+                    for c in citations:
+                        st.markdown(f"- **{c.get('id_reso','')}** ({c.get('fecha','')})")
+                        st.write(f"  *{c.get('extracto','')}*")
+            
+            if trace_id:
+                render_feedback_controls(trace_id, backend_response=response)
 
-        # Feedback buttons
-        already = st.session_state.feedback_sent.get(trace_id)
-        col1, col2 = st.columns(2)
-        with col1:
-            like_disabled = already is not None
-            if st.button("Útil", key=f"like_{trace_id}", icon=":material/thumb_up:", disabled=like_disabled):
-                send_feedback("like", trace_id)
-                
-        with col2:
-            if st.button("No útil", key=f"dislike_{len(st.session_state.messages)}", icon=":material/thumb_down:"):
-                send_feedback("dislike", trace_id)
-        st.session_state.messages.append({"role": "assistant", "content": answer, "citations": citations})
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": answer,
+            "citations": citations,
+            "trace_id": trace_id,
+            "backend_response": response
+        })
     else:
-        st.markdown("Chat error... Por favor, intenta de nuevo más tarde.")
+        st.error("Hubo un error al obtener la respuesta del servidor. Por favor, intenta de nuevo más tarde.")
     
 
             
